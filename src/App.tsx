@@ -51,7 +51,7 @@ function App({ username, onLogout }: AppProps) {
           <p className="text-sm font-semibold tracking-tight text-foreground">
             Image to Excel
           </p>
-          <p className="hidden text-xs text-muted-foreground sm:block">
+          <p className="text-xs text-muted-foreground">
             {username}으로 로그인됨 · 이미지에서 표를 추출합니다
           </p>
         </div>

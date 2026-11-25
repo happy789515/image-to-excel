@@ -130,7 +130,7 @@ export function Workshop() {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 w-full flex-col lg:flex-row">
+    <div className="flex min-h-0 flex-1 w-full flex-row">
       <WorkshopSidebar
         queue={queue}
         activeId={activeId}
@@ -252,14 +252,14 @@ function WorkPanel({
             <m.p
               variants={staggerItem}
               transition={transition}
-              className="text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+              className="text-xl font-semibold tracking-tight text-foreground"
             >
               이미지를 선택해 주세요
             </m.p>
             <m.p
               variants={staggerItem}
               transition={transition}
-              className="max-w-md text-sm text-muted-foreground sm:text-base"
+              className="max-w-md text-base text-muted-foreground"
             >
               왼쪽 목록에서 이미지를 고르면 표 검출 화면이 열립니다.
             </m.p>

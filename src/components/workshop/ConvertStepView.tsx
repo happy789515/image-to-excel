@@ -75,7 +75,7 @@ export function ConvertStepView({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <m.div
-        className="grid min-h-0 min-w-0 flex-1 gap-3 overflow-hidden lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden"
         variants={staggerContainerFast}
         initial={motionInitial(reduced)}
         animate="animate"

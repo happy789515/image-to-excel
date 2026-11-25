@@ -50,9 +50,9 @@ export function WorkflowStepBar({
 
   return (
     <header className="shrink-0 border-b border-border bg-card px-4 py-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+      <div className="flex flex-row items-center gap-6">
         <nav className="min-w-0 flex-1" aria-label="작업 단계">
-          <ol className="flex gap-2 sm:gap-3" role="list">
+          <ol className="flex gap-3" role="list">
             {WORKSHOP_STEPS.map((stepId, i) => {
               const done = i < currentIndex
               const active = stepId === current
@@ -64,7 +64,7 @@ export function WorkflowStepBar({
                   {i > 0 ? (
                     <m.span
                       className={cn(
-                        'mr-2 hidden w-4 shrink-0 self-center border-t sm:block',
+                        'mr-2 block w-4 shrink-0 self-center border-t',
                         done || active ? 'border-primary/40' : 'border-border',
                       )}
                       aria-hidden
@@ -79,7 +79,7 @@ export function WorkflowStepBar({
                     disabled={!canClick}
                     onClick={() => canClick && onNavigate?.(stepId)}
                     className={cn(
-                      'relative flex min-w-0 flex-1 flex-col gap-1 rounded-lg border px-2 py-2 text-left transition-colors sm:px-3',
+                      'relative flex min-w-0 flex-1 flex-col gap-1 rounded-lg border px-3 py-2 text-left transition-colors',
                       active &&
                         'border-primary/35 ring-1 ring-inset ring-primary/25',
                       !active &&
@@ -112,14 +112,14 @@ export function WorkflowStepBar({
                       />
                       <span
                         className={cn(
-                          'truncate text-xs font-semibold tracking-tight sm:text-sm',
+                          'truncate text-sm font-semibold tracking-tight',
                           active ? 'text-foreground' : 'text-muted-foreground',
                         )}
                       >
                         {WORKSHOP_STEP_LABELS[stepId]}
                       </span>
                     </span>
-                    <span className="relative hidden truncate text-[10px] text-muted-foreground sm:block">
+                    <span className="relative truncate text-[10px] text-muted-foreground">
                       {i + 1}단계
                     </span>
                   </button>

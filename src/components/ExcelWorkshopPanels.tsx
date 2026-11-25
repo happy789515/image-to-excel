@@ -28,7 +28,7 @@ export function ExcelWorkshopPanels({
   if (!active) return null
 
   return (
-    <div className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-2">
+    <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-hidden">
       <Card className="flex min-h-0 flex-col overflow-hidden py-0">
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 border-b border-border">
           <CardTitle className="text-xs">Excel · 시트 목록</CardTitle>
