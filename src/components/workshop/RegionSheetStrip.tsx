@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Trash2 } from 'lucide-react'
 
 import type { EditableBox } from '@/components/EditableBBoxLayer'
@@ -40,33 +47,66 @@ export function RegionSheetStrip({
   const thumbRefs = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const rafRef = useRef(0)
 
+  const boxIdsKey = useMemo(() => boxes.map((b) => b.id).join('\0'), [boxes])
+
+  const onThumbCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
+    if (el) {
+      const id = el.dataset.thumbId
+      if (id) thumbRefs.current.set(id, el)
+      return
+    }
+    for (const [id, canvas] of thumbRefs.current) {
+      if (!canvas.isConnected) thumbRefs.current.delete(id)
+    }
+  }, [])
+
   const signature = useMemo(
     () => boxes.map((b) => `${b.id}:${boxKey(b.box)}:${b.title}`).join('|'),
     [boxes],
   )
 
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      const img = imageRef.current
-      if (!img?.naturalWidth) return
+  const drawThumbs = useCallback(() => {
+    const img = imageRef.current
+    if (!img?.naturalWidth) return false
 
-      for (const item of boxes) {
-        const canvas = thumbRefs.current.get(item.id)
-        if (!canvas) continue
+    let drewAny = false
+    for (const item of boxes) {
+      const canvas = thumbRefs.current.get(item.id)
+      if (!canvas) continue
+      if (
         drawCropPreview(img, item.box, canvas, {
           padRatio: PREVIEW_PAD_RATIO,
           maxDimension: 320,
         })
+      ) {
+        drewAny = true
       }
-    })
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [imageRef, imageRevision, signature, boxes])
+    }
+    return drewAny
+  }, [boxes, imageRef])
 
-  const setThumbRef = (id: string) => (el: HTMLCanvasElement | null) => {
-    if (el) thumbRefs.current.set(id, el)
-    else thumbRefs.current.delete(id)
-  }
+  const scheduleDrawThumbs = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    let attempts = 0
+    const tick = () => {
+      drawThumbs()
+      const drewAll =
+        boxes.length > 0 &&
+        boxes.every((b) => {
+          const c = thumbRefs.current.get(b.id)
+          return c && c.width > 0
+        })
+      if (drewAll || attempts >= 20) return
+      attempts += 1
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+  }, [boxes, drawThumbs])
+
+  useLayoutEffect(() => {
+    scheduleDrawThumbs()
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [imageRef, imageRevision, scheduleDrawThumbs, signature, boxIdsKey])
 
   if (boxes.length === 0) return null
 
@@ -75,11 +115,14 @@ export function RegionSheetStrip({
   return (
     <Card
       size="sm"
-      className={cn('shrink-0 bg-card py-0', className)}
+      className={cn(
+        'shrink-0 gap-0 border border-border bg-card py-0 ring-0',
+        className,
+      )}
       role="region"
       aria-label="시트 영역 목록"
     >
-      <CardHeader className="border-b border-border px-3 py-2">
+      <CardHeader className="z-10 shrink-0 rounded-t-xl border-b border-border bg-card px-3 pt-2 pb-2">
         <CardTitle className="text-xs">
           시트 영역 {boxes.length > 1 ? `${boxes.length}개` : ''}
         </CardTitle>
@@ -88,8 +131,8 @@ export function RegionSheetStrip({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex items-stretch gap-0 p-0">
-        <div className="scrollbar-thin min-w-0 flex-1 overflow-x-auto p-2">
+      <CardContent className="flex min-h-0 items-stretch gap-0 overflow-hidden rounded-b-xl p-0">
+        <div className="scrollbar-thin min-w-0 flex-1 overflow-x-auto overflow-y-hidden p-2">
           <div className="flex w-max min-w-full gap-2">
             {boxes.map((b, i) => {
               const active = b.id === selectedId
@@ -98,8 +141,8 @@ export function RegionSheetStrip({
                   key={b.id}
                   size="sm"
                   className={cn(
-                    'w-[11.5rem] shrink-0 bg-card py-0 transition-colors',
-                    active && 'bg-primary/10 ring-2 ring-inset ring-primary/25',
+                    'w-[11.5rem] shrink-0 border border-border bg-card py-0 ring-0 transition-colors',
+                    active && 'border-primary/50 bg-primary/10',
                     !active && 'hover:bg-muted/40',
                   )}
                 >
@@ -111,8 +154,8 @@ export function RegionSheetStrip({
                       className="block w-full cursor-pointer overflow-hidden text-left transition-opacity hover:opacity-95 active:opacity-90"
                     >
                       <SheetThumbPanZoom
-                        id={b.id}
-                        setThumbRef={setThumbRef(b.id)}
+                        thumbId={b.id}
+                        onCanvasRef={onThumbCanvasRef}
                         resetKey={`${signature}:${b.id}`}
                       />
                     </button>
@@ -175,26 +218,29 @@ export function RegionSheetStrip({
 }
 
 function SheetThumbPanZoom({
-  id,
-  setThumbRef,
+  thumbId,
+  onCanvasRef,
   resetKey,
 }: {
-  id: string
-  setThumbRef: (el: HTMLCanvasElement | null) => void
+  thumbId: string
+  onCanvasRef: (el: HTMLCanvasElement | null) => void
   resetKey: string
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const panCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  const mergeRef = (el: HTMLCanvasElement | null) => {
-    canvasRef.current = el
-    setThumbRef(el)
-  }
+  const mergeRef = useCallback(
+    (el: HTMLCanvasElement | null) => {
+      panCanvasRef.current = el
+      onCanvasRef(el)
+    },
+    [onCanvasRef],
+  )
 
   return (
     <div className="relative aspect-[184/72] w-full bg-background">
       <PanZoomViewport
         className="absolute inset-0"
-        minimap={{ kind: 'canvas', canvasRef }}
+        minimap={{ kind: 'canvas', canvasRef: panCanvasRef }}
         minimapClassName="h-10 w-14"
         resetKey={resetKey}
       >
@@ -202,7 +248,7 @@ function SheetThumbPanZoom({
           ref={mergeRef}
           width={184}
           height={72}
-          data-thumb-id={id}
+          data-thumb-id={thumbId}
           className="block w-[11.5rem] max-w-none"
           aria-hidden
         />

@@ -4,6 +4,7 @@ import {
   GENERATION_CONFIG,
   TABLE_EXTRACT_SYSTEM_INSTRUCTION,
 } from './gemini-config'
+import { fetchGemini } from './gemini-fetch'
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const ALLOWED_MIME = new Set([
@@ -105,7 +106,7 @@ export async function handleExtractTable(
   }
 
   const url = `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent`
-  const upstream = await fetch(url, {
+  const upstream = await fetchGemini(env, url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

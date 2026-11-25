@@ -3,6 +3,20 @@
   "name": "image-to-excel",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-25",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "US_EXIT",
+        "class_name": "UsExit",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1-us-exit",
+      "new_sqlite_classes": ["UsExit"],
+    },
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
