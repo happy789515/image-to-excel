@@ -6,4 +6,6 @@ export type WorkshopStepBridge = {
   access: StepAccess
   busy: boolean
   navigate: (step: WorkshopStepId) => void
+  reviewDirty: boolean
+  reviewCommitted: boolean
 }
