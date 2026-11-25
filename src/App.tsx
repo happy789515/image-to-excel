@@ -1,8 +1,15 @@
+import { LogOut, Table2 } from 'lucide-react'
+
 import { Workshop } from '@/components/workshop/Workshop'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { Table2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-function App() {
+type AppProps = {
+  username: string
+  onLogout: () => void
+}
+
+function App({ username, onLogout }: AppProps) {
   return (
     <div className="flex h-svh flex-col overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
@@ -17,10 +24,20 @@ function App() {
             Image to Excel
           </p>
           <p className="hidden text-xs text-muted-foreground sm:block">
-            로그인 없이 이미지에서 표를 추출합니다
+            {username}으로 로그인됨 · 이미지에서 표를 추출합니다
           </p>
         </div>
-        <ThemeToggle className="ml-auto shrink-0 self-center" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5"
+          onClick={onLogout}
+        >
+          <LogOut className="size-3.5" aria-hidden />
+          로그아웃
+        </Button>
+        <ThemeToggle className="shrink-0 self-center" />
       </header>
 
       <Workshop />

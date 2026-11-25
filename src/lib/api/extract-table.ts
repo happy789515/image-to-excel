@@ -24,6 +24,7 @@ export async function extractTableViaApi(
 ): Promise<GeminiTableSheet> {
   const res = await fetch('/api/extract-table', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     signal,
     body: JSON.stringify({ imageBase64, mimeType, sheetName }),
