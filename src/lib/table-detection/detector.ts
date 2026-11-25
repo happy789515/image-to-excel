@@ -1,11 +1,12 @@
-import { env, pipeline, type ObjectDetectionPipeline } from '@huggingface/transformers'
+import { pipeline, type ObjectDetectionPipeline } from '@huggingface/transformers'
 
+import { configureTransformersEnv } from '@/lib/transformers-env'
 import {
   TABLE_DETECTION_MODEL_ID,
   type TableDetectionBox,
 } from '@/lib/table-detection/types'
 
-env.useBrowserCache = true
+configureTransformersEnv()
 
 let detectorPromise: Promise<ObjectDetectionPipeline> | null = null
 

@@ -30,3 +30,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Workers asset size (25 MiB limit)
+        run: node scripts/verify-workers-assets.mjs
+
+      - name: Wrangler deploy dry-run
+        run: npx wrangler deploy --dry-run
