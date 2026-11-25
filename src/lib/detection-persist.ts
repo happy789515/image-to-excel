@@ -1,4 +1,5 @@
 import type { EditableBox } from '@/components/EditableBBoxLayer'
+import { normalizeBoxTitles } from '@/lib/bbox/box-title'
 
 import {
   deleteDetectionRowsExcept,
@@ -26,7 +27,9 @@ export function detectionEmptyHintMessage(emptyHint: boolean): string | null {
 export async function loadDetectionResult(
   fileId: string,
 ): Promise<StoredDetection | null> {
-  return idbGetDetection(fileId)
+  const saved = await idbGetDetection(fileId)
+  if (!saved) return null
+  return { ...saved, boxes: normalizeBoxTitles(saved.boxes) }
 }
 
 export async function persistDetectionResult(

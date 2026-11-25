@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { AlertCircle, FileImage, FileText, Upload, X } from 'lucide-react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   filesFromClipboard,
@@ -12,6 +13,8 @@ import {
   UPLOAD_ACCEPT_LABEL,
 } from '@/lib/image-upload'
 import { deleteDetectionResult } from '@/lib/detection-persist'
+import { clearWorkshopHydration } from '@/lib/workshop-hydration-cache'
+import { deleteWorkshopSession } from '@/lib/workshop-persist'
 import {
   clearPersistedUploads,
   loadPersistedUploads,
@@ -182,6 +185,8 @@ export function ImageDropzone() {
     setActiveId((prev) => (prev === id ? null : prev))
     setError(null)
     void deleteDetectionResult(id).catch((err) => console.error(err))
+    void deleteWorkshopSession(id).catch((err) => console.error(err))
+    clearWorkshopHydration(id)
   }, [])
 
   const clearAll = useCallback(() => {
@@ -218,13 +223,10 @@ export function ImageDropzone() {
       />
 
       {error ? (
-        <p
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
-        >
-          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </p>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {queue.length > 0 ? (
