@@ -1,10 +1,17 @@
 import { AlertTriangle, CircleDashed, CircleDot, Loader2 } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import {
   PHASE_DISPLAY,
   PIPELINE_PHASES,
   type WorkflowPhaseId,
 } from '@/lib/workflow/types'
+import {
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { fadeUp, springSnappy } from '@/lib/motion/variants'
 import { cn } from 'cn'
 
 type Props = {
@@ -46,6 +53,9 @@ function defaultDetail(phase: WorkflowPhaseId): string | null {
 }
 
 export function WorkflowPhaseBar({ current, detail, errorAt }: Props) {
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
+
   const title =
     current === 'error' && errorAt
       ? `${PHASE_DISPLAY[errorAt].title} — 오류`
@@ -93,18 +103,26 @@ export function WorkflowPhaseBar({ current, detail, errorAt }: Props) {
           </div>
         </nav>
 
-        {subtitle ? (
-          <p
-            className={cn(
-              'min-w-0 text-sm sm:max-w-xs sm:flex-1 sm:text-right',
-              current === 'error' ? 'text-destructive' : 'text-muted-foreground',
-              current === 'complete' && !detail && 'text-primary',
-            )}
-            aria-live="polite"
-          >
-            {subtitle}
-          </p>
-        ) : null}
+        <AnimatePresence mode="wait" initial={false}>
+          {subtitle ? (
+            <m.p
+              key={subtitle}
+              className={cn(
+                'min-w-0 text-sm sm:max-w-xs sm:flex-1 sm:text-right',
+                current === 'error' ? 'text-destructive' : 'text-muted-foreground',
+                current === 'complete' && !detail && 'text-primary',
+              )}
+              aria-live="polite"
+              variants={fadeUp}
+              initial={motionInitial(reduced)}
+              animate="animate"
+              exit="exit"
+              transition={transition}
+            >
+              {subtitle}
+            </m.p>
+          ) : null}
+        </AnimatePresence>
       </div>
     </header>
   )

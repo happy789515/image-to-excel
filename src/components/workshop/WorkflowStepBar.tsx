@@ -6,6 +6,7 @@ import {
   Table2,
   type LucideIcon,
 } from 'lucide-react'
+import { m } from 'motion/react'
 
 import {
   WORKSHOP_STEP_LABELS,
@@ -13,6 +14,13 @@ import {
   type WorkshopStepId,
   workshopStepIndex,
 } from '@/lib/workflow/workshop-steps'
+import {
+  motionFrom,
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { scaleInTight, springSnappy } from '@/lib/motion/variants'
 import { cn } from 'cn'
 
 export type StepAccess = Record<WorkshopStepId, boolean>
@@ -36,6 +44,8 @@ export function WorkflowStepBar({
   busy = false,
   onNavigate,
 }: Props) {
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
   const currentIndex = workshopStepIndex(current)
 
   return (
@@ -52,12 +62,16 @@ export function WorkflowStepBar({
               return (
                 <li key={stepId} className="flex min-w-0 flex-1 items-stretch">
                   {i > 0 ? (
-                    <span
+                    <m.span
                       className={cn(
                         'mr-2 hidden w-4 shrink-0 self-center border-t sm:block',
                         done || active ? 'border-primary/40' : 'border-border',
                       )}
                       aria-hidden
+                      initial={motionFrom(reduced, { scaleX: 0 })}
+                      animate={{ scaleX: done || active ? 1 : 0.35 }}
+                      transition={transition}
+                      style={{ originX: 0 }}
                     />
                   ) : null}
                   <button
@@ -65,9 +79,9 @@ export function WorkflowStepBar({
                     disabled={!canClick}
                     onClick={() => canClick && onNavigate?.(stepId)}
                     className={cn(
-                      'flex min-w-0 flex-1 flex-col gap-1 rounded-lg border px-2 py-2 text-left transition-colors sm:px-3',
+                      'relative flex min-w-0 flex-1 flex-col gap-1 rounded-lg border px-2 py-2 text-left transition-colors sm:px-3',
                       active &&
-                        'border-primary/35 bg-primary/10 ring-1 ring-inset ring-primary/25',
+                        'border-primary/35 ring-1 ring-inset ring-primary/25',
                       !active &&
                         done &&
                         'border-primary/25 bg-card',
@@ -77,10 +91,19 @@ export function WorkflowStepBar({
                       canClick && 'cursor-pointer',
                       !active && canClick && 'hover:border-border hover:bg-muted/60',
                       !active && !canClick && 'cursor-default opacity-70',
+                      active && 'bg-primary/10',
                     )}
                     aria-current={active ? 'step' : undefined}
                   >
-                    <span className="flex items-center gap-2">
+                    {active && !reduced ? (
+                      <m.span
+                        layoutId="workshop-step-active"
+                        className="absolute inset-0 rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/25"
+                        transition={transition}
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="relative flex items-center gap-2">
                       <StepMarker
                         stepId={stepId}
                         done={done}
@@ -96,7 +119,7 @@ export function WorkflowStepBar({
                         {WORKSHOP_STEP_LABELS[stepId]}
                       </span>
                     </span>
-                    <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
+                    <span className="relative hidden truncate text-[10px] text-muted-foreground sm:block">
                       {i + 1}단계
                     </span>
                   </button>
@@ -121,6 +144,8 @@ function StepMarker({
   active: boolean
   busy: boolean
 }) {
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
   const Icon = STEP_ICON[stepId]
 
   if (busy) {
@@ -128,22 +153,34 @@ function StepMarker({
   }
   if (done) {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+      <m.span
+        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+        variants={scaleInTight}
+        initial={motionInitial(reduced)}
+        animate="animate"
+        transition={transition}
+      >
         <Check className="size-3" strokeWidth={2.5} aria-hidden />
-      </span>
+      </m.span>
     )
   }
   return (
-    <span
+    <m.span
       className={cn(
         'flex size-5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset',
         active
           ? 'bg-primary/20 text-primary ring-primary/40'
           : 'bg-background text-muted-foreground ring-border',
       )}
+      animate={
+        active && !busy && !reduced
+          ? { scale: [1, 1.08, 1] }
+          : { scale: 1 }
+      }
+      transition={{ duration: 0.35, ease: 'easeOut' }}
       aria-hidden
     >
       <Icon className="size-3" strokeWidth={2.25} />
-    </span>
+    </m.span>
   )
 }
