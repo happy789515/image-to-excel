@@ -14,5 +14,15 @@ export default defineConfig({
     alias: {
       '@': path.resolve(dirname, './src'),
     },
+    conditions: [
+      'onnxruntime-web-use-extern-wasm',
+      'import',
+      'module',
+      'browser',
+      'default',
+    ],
+  },
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers'],
   },
 })

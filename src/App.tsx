@@ -1,121 +1,51 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { ImageDropzone } from '@/components/ImageDropzone'
+import { TABLE_DETECTION_ATTRIBUTION } from '@/lib/table-detection/types'
+import { Table2 } from 'lucide-react'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="flex min-h-svh flex-col">
+      <header className="border-b border-border/80 bg-card/90 shadow-sm">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-5 pr-16 sm:px-6 sm:pr-20">
+          <div
+            className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_1px_2px_color-mix(in_oklch,var(--primary),transparent_40%),0_8px_24px_color-mix(in_oklch,var(--primary),transparent_75%)]"
+            aria-hidden
+          >
+            <Table2 className="size-5" strokeWidth={2} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-lg font-semibold tracking-tight text-foreground">
+              Image to Excel
+            </p>
+            <p className="text-sm text-muted-foreground">
+              로그인 없이 이미지에서 표를 추출합니다
+            </p>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mb-8 max-w-prose">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            변환할 이미지를 올려주세요
+          </h1>
+          <p className="mt-2 text-base text-muted-foreground">
+            이미지·PDF를 받습니다. 드래그, 파일 선택, Ctrl+V 붙여넣기를
+            지원합니다.
           </p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
+        <ImageDropzone />
+      </main>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <footer className="border-t border-border/80 bg-card/40 py-6">
+        <p className="text-center text-xs text-muted-foreground">
+          파일은 브라우저에서 처리되며 서버에 업로드하지 않습니다.
+          <br />
+          {TABLE_DETECTION_ATTRIBUTION}
+        </p>
+      </footer>
+    </div>
   )
 }
 
