@@ -136,7 +136,6 @@ export function TableDetectionPreview({
   const skipAutoOnceRef = useRef(false)
   const workshopStepRef = useRef<WorkshopStepId>('detect')
   const onPhaseRef = useRef(onPhase)
-  onPhaseRef.current = onPhase
   const [exportSheets, setExportSheets] = useState<ExportSheet[] | null>(null)
   const [downloadFileName, setDownloadFileName] = useState('')
   const [exportSignature, setExportSignature] = useState<string | null>(null)
@@ -144,7 +143,14 @@ export function TableDetectionPreview({
   const [reviewDirty, setReviewDirty] = useState(false)
   const [discardReviewOpen, setDiscardReviewOpen] = useState(false)
   const pendingStepRef = useRef<WorkshopStepId | null>(null)
-  workshopStepRef.current = workshopStep
+
+  useEffect(() => {
+    onPhaseRef.current = onPhase
+  }, [onPhase])
+
+  useEffect(() => {
+    workshopStepRef.current = workshopStep
+  }, [workshopStep])
 
   const exportBlob = useMemo(() => {
     if (!exportSheets?.length) return null
@@ -170,13 +176,17 @@ export function TableDetectionPreview({
 
   useEffect(() => {
     if (
-      exportSheets !== null &&
-      exportSignature !== null &&
-      !exportStillValid(boxes, exportSignature)
+      exportSheets === null ||
+      exportSignature === null ||
+      exportStillValid(boxes, exportSignature)
     ) {
-      resetExport()
-      if (workshopStep === 'review') setWorkshopStep('convert')
+      return
     }
+    const step = workshopStep
+    queueMicrotask(() => {
+      resetExport()
+      if (step === 'review') setWorkshopStep('convert')
+    })
   }, [boxes, exportSheets, exportSignature, resetExport, workshopStep])
 
   const refreshFitLayout = useCallback(() => {
@@ -255,7 +265,6 @@ export function TableDetectionPreview({
   useEffect(() => {
     let cancelled = false
     skipAutoOnceRef.current = false
-    setSessionReady(false)
 
     const applyBundle = (
       saved: StoredDetection | null,
@@ -299,11 +308,19 @@ export function TableDetectionPreview({
       }
     }
 
-    const cached = getWorkshopHydration(fileId)
-    if (cached) {
-      applyBundle(cached.detection, cached.session)
+    const finishHydration = () => {
+      if (cancelled) return
       setCacheReady(true)
       setSessionReady(true)
+    }
+
+    const cached = getWorkshopHydration(fileId)
+    if (cached) {
+      queueMicrotask(() => {
+        if (cancelled) return
+        applyBundle(cached.detection, cached.session)
+        finishHydration()
+      })
       return () => {
         cancelled = true
       }
@@ -319,14 +336,14 @@ export function TableDetectionPreview({
 
         const bundle = { detection: saved, session }
         setWorkshopHydration(fileId, bundle)
-        applyBundle(saved, session)
+        queueMicrotask(() => {
+          if (cancelled) return
+          applyBundle(saved, session)
+          finishHydration()
+        })
       } catch (err) {
         console.error(err)
-      } finally {
-        if (!cancelled) {
-          setCacheReady(true)
-          setSessionReady(true)
-        }
+        finishHydration()
       }
     })()
 
@@ -499,7 +516,7 @@ export function TableDetectionPreview({
         setWorkshopStep('review')
       }
     },
-    [boxes.length, exportBlob, exportSheets?.length, exportStale, workshopStep],
+    [boxes.length, exportBlob, exportSheets?.length, exportStale],
   )
 
   const attemptNavigateStep = useCallback(

@@ -43,6 +43,7 @@ export async function loadFileWorkshopProgress(
 export async function loadQueueWorkshopProgress(
   fileIds: string[],
 ): Promise<Record<string, FileWorkshopProgress>> {
+  if (fileIds.length === 0) return {}
   const entries = await Promise.all(
     fileIds.map(async (id) => {
       try {

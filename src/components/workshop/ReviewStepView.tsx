@@ -19,7 +19,21 @@ type Props = {
   onCommit: (sheets: ExportSheet[]) => void
 }
 
-export function ReviewStepView({
+function committedSheetsKey(sheets: ExportSheet[]): string {
+  return sheets
+    .map((s) => `${s.name}:${s.rows.length}:${s.rows.map((r) => r.join('\x1e')).join('\x1f')}`)
+    .join('\x00')
+}
+
+export function ReviewStepView(props: Props) {
+  const key = useMemo(
+    () => committedSheetsKey(props.committedSheets),
+    [props.committedSheets],
+  )
+  return <ReviewStepEditor key={key} {...props} />
+}
+
+function ReviewStepEditor({
   committedSheets,
   activeIndex,
   onSelectIndex,
@@ -29,10 +43,6 @@ export function ReviewStepView({
   onCommit,
 }: Props) {
   const [draftSheets, setDraftSheets] = useState<ExportSheet[]>(committedSheets)
-
-  useEffect(() => {
-    setDraftSheets(committedSheets)
-  }, [committedSheets])
 
   const dirty = useMemo(
     () => !exportSheetsEqual(draftSheets, committedSheets),

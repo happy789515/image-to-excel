@@ -52,24 +52,25 @@ export function Workshop() {
 
   useEffect(() => {
     const ids = queue.map((item) => item.id)
-    if (ids.length === 0) {
-      setProgressByFileId({})
-      return
-    }
     void loadQueueWorkshopProgress(ids).then(setProgressByFileId)
-  }, [queueKey])
+  }, [queue, queueKey])
 
-  useEffect(() => {
-    if (!activeId || !stepBridge) return
-    setProgressByFileId((prev) => ({
-      ...prev,
-      [activeId]: progressFromStepAccess(
-        stepBridge.current,
-        stepBridge.access,
-        stepBridge.reviewCommitted,
-      ),
-    }))
-  }, [activeId, stepBridge])
+  const handleStepBridgeChange = useCallback(
+    (bridge: WorkshopStepBridge | null) => {
+      setStepBridge(bridge)
+      if (activeId && bridge) {
+        setProgressByFileId((prev) => ({
+          ...prev,
+          [activeId]: progressFromStepAccess(
+            bridge.current,
+            bridge.access,
+            bridge.reviewCommitted,
+          ),
+        }))
+      }
+    },
+    [activeId],
+  )
 
   const handleSelectFile = useCallback(
     (id: string) => {
@@ -133,7 +134,7 @@ export function Workshop() {
           <WorkPanel
             activeItem={activeItem}
             onPhase={onPhase}
-            onStepBridgeChange={setStepBridge}
+            onStepBridgeChange={handleStepBridgeChange}
           />
         </div>
       </div>

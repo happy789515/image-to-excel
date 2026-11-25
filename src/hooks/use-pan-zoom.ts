@@ -41,11 +41,28 @@ export function usePanZoom(enabled = true) {
     if (!vp || !content) return
     const vpRect = vp.getBoundingClientRect()
     const contentRect = content.getBoundingClientRect()
-    setViewportSize({ w: vpRect.width, h: vpRect.height })
-    if (state.scale <= 1.001) {
-      setContentSize({ w: contentRect.width, h: contentRect.height })
-    }
-  }, [state.scale])
+    const vw = vpRect.width
+    const vh = vpRect.height
+    const cw = contentRect.width
+    const ch = contentRect.height
+    setViewportSize({ w: vw, h: vh })
+    setContentSize({ w: cw, h: ch })
+    if (!enabled) return
+    setState((prev) => {
+      if (prev.scale > 1.001) return prev
+      if (vw < 1 || cw < 1) return prev
+      const panX = (vw - cw) / 2
+      const panY = (vh - ch) / 2
+      if (
+        prev.scale === 1 &&
+        Math.abs(prev.panX - panX) < 0.5 &&
+        Math.abs(prev.panY - panY) < 0.5
+      ) {
+        return prev
+      }
+      return { scale: 1, panX, panY }
+    })
+  }, [enabled])
 
   useEffect(() => {
     const vp = viewportRef.current
@@ -68,24 +85,6 @@ export function usePanZoom(enabled = true) {
     setContentSize({ w: cw, h: ch })
     setState({ scale: 1, panX: (vpRect.width - cw) / 2, panY: (vpRect.height - ch) / 2 })
   }, [contentSize.h, contentSize.w])
-
-  useEffect(() => {
-    if (!enabled) return
-    if (viewportSize.w < 1 || contentSize.w < 1) return
-    setState((prev) => {
-      if (prev.scale > 1.001) return prev
-      const panX = (viewportSize.w - contentSize.w) / 2
-      const panY = (viewportSize.h - contentSize.h) / 2
-      if (
-        prev.scale === 1 &&
-        Math.abs(prev.panX - panX) < 0.5 &&
-        Math.abs(prev.panY - panY) < 0.5
-      ) {
-        return prev
-      }
-      return { scale: 1, panX, panY }
-    })
-  }, [contentSize.h, contentSize.w, enabled, viewportSize.h, viewportSize.w])
 
   const setScaleAroundPoint = useCallback(
     (nextScale: number, focalX: number, focalY: number) => {

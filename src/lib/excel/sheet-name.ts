@@ -1,4 +1,4 @@
-const INVALID = /[\\/*?:\[\]]/g
+const INVALID = /[\\/*?:[\]]/g
 const MAX_LEN = 31
 
 export function sanitizeSheetName(raw: string, used: Set<string>): string {

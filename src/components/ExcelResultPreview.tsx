@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Download } from 'lucide-react'
 
 import { ExcelSheetTable } from '@/components/ExcelSheetTable'
@@ -22,11 +22,21 @@ export function ExcelResultPreview({
   downloadFileName,
   warnings,
 }: Props) {
-  const [activeIndex, setActiveIndex] = useState(0)
-
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [sheets])
+  const sheetsKey = useMemo(
+    () => sheets.map((s) => s.name).join('\0'),
+    [sheets],
+  )
+  const [activeIndexByKey, setActiveIndexByKey] = useState(() => ({
+    key: sheetsKey,
+    index: 0,
+  }))
+  const activeIndex =
+    activeIndexByKey.key === sheetsKey
+      ? Math.min(activeIndexByKey.index, Math.max(0, sheets.length - 1))
+      : 0
+  const setActiveIndex = (index: number) => {
+    setActiveIndexByKey({ key: sheetsKey, index })
+  }
 
   const active = sheets[activeIndex] ?? sheets[0]
 

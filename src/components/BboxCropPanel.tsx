@@ -37,6 +37,7 @@ export function BboxCropPanel({
   const viewportHostRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef(0)
   const [fitSize, setFitSize] = useState<{ w: number; h: number } | null>(null)
+  const [hasImage, setHasImage] = useState(false)
 
   const refreshFitSize = useCallback(() => {
     const host = viewportHostRef.current
@@ -63,6 +64,7 @@ export function BboxCropPanel({
     rafRef.current = requestAnimationFrame(() => {
       const img = imageRef.current
       const main = mainCanvasRef.current
+      setHasImage(Boolean(img?.naturalWidth))
       if (!img?.naturalWidth || !main) return
 
       const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0]
@@ -87,7 +89,6 @@ export function BboxCropPanel({
   }, [refreshFitSize])
 
   const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0]
-  const hasImage = Boolean(imageRef.current?.naturalWidth)
 
   if (boxes.length === 0) {
     return (
