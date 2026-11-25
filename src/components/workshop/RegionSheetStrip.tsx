@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   type ReactNode,
-  type Ref,
   type RefObject,
 } from 'react'
 import { Trash2 } from 'lucide-react'
@@ -229,8 +228,8 @@ function SheetThumbPanZoom({
 }) {
   const panCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  const mergeRef = useCallback<Ref<HTMLCanvasElement>>(
-    (el) => {
+  const mergeRef = useCallback(
+    (el: HTMLCanvasElement | null) => {
       panCanvasRef.current = el
       onCanvasRef(el)
     },
