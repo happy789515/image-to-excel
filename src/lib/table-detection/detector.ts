@@ -1,4 +1,8 @@
-import { pipeline, type ObjectDetectionPipeline } from '@huggingface/transformers'
+import {
+  AutoModelForObjectDetection,
+  AutoProcessor,
+  ObjectDetectionPipeline,
+} from '@huggingface/transformers'
 
 import { configureTransformersEnv } from '@/lib/transformers-env'
 import {
@@ -8,11 +12,37 @@ import {
 
 configureTransformersEnv()
 
+/** Same defaults as `pipeline('object-detection', …)` — ONNX subfolder, quantized weights. */
+const DETECTOR_LOAD_OPTIONS = {
+  subfolder: 'onnx',
+} as const
+
 let detectorPromise: Promise<ObjectDetectionPipeline> | null = null
 
+/**
+ * `pipeline('object-detection')` treats the task as multimodal and probes
+ * `tokenizer_config.json` on the Hub (404 for this vision-only model). Load
+ * model + processor directly instead to avoid the stray network error.
+ */
 export function loadTableDetector(): Promise<ObjectDetectionPipeline> {
   if (!detectorPromise) {
-    detectorPromise = pipeline('object-detection', TABLE_DETECTION_MODEL_ID)
+    detectorPromise = (async () => {
+      const [model, processor] = await Promise.all([
+        AutoModelForObjectDetection.from_pretrained(
+          TABLE_DETECTION_MODEL_ID,
+          DETECTOR_LOAD_OPTIONS,
+        ),
+        AutoProcessor.from_pretrained(
+          TABLE_DETECTION_MODEL_ID,
+          DETECTOR_LOAD_OPTIONS,
+        ),
+      ])
+      return new ObjectDetectionPipeline({
+        task: 'object-detection',
+        model,
+        processor,
+      })
+    })()
   }
   return detectorPromise
 }

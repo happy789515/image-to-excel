@@ -11,6 +11,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    watch: {
+      ignored: ['**/.wrangler/**'],
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8787',
