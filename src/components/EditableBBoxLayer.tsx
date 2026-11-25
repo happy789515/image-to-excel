@@ -18,7 +18,7 @@ import {
 import type { TableDetectionBox } from '@/lib/table-detection/types'
 import { cn } from 'cn'
 
-export type EditableBox = TableDetectionBox & { id: string }
+export type EditableBox = TableDetectionBox & { id: string; title: string }
 
 type Handle = 'nw' | 'ne' | 'sw' | 'se' | 'move'
 

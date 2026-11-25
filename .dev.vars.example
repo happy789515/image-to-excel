@@ -1,0 +1,2 @@
+# Copy to .dev.vars in this directory and set your key from Google AI Studio.
+GEMINI_API_KEY=

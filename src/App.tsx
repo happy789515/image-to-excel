@@ -40,7 +40,7 @@ function App() {
 
       <footer className="border-t border-border/80 bg-card/40 py-6">
         <p className="text-center text-xs text-muted-foreground">
-          파일은 브라우저에서 처리되며 서버에 업로드하지 않습니다.
+          표 영역 검출은 브라우저에서, Excel 변환은 Gemini API로 처리
           <br />
           {TABLE_DETECTION_ATTRIBUTION}
         </p>

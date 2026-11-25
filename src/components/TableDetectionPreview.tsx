@@ -6,12 +6,14 @@ import {
   type EditableBox,
 } from '@/components/EditableBBoxLayer'
 import { Button } from '@/components/ui/button'
+import { defaultBoxTitle, withTitleOnAppend } from '@/lib/bbox/box-title'
 import { defaultCenterBox } from '@/lib/bbox/geometry'
 import {
   detectionEmptyHintMessage,
   loadDetectionResult,
   persistDetectionResult,
 } from '@/lib/detection-persist'
+import { TableExportPanel } from '@/components/TableExportPanel'
 import { detectTablesInImage } from '@/lib/table-detection/detector'
 import type { TableDetectionBox } from '@/lib/table-detection/types'
 
@@ -27,6 +29,7 @@ function toEditable(items: TableDetectionBox[]): EditableBox[] {
   return items.map((item, index) => ({
     ...item,
     id: `det-${index}-${crypto.randomUUID()}`,
+    title: defaultBoxTitle(index),
   }))
 }
 
@@ -161,18 +164,21 @@ export function TableDetectionPreview({ fileId, imageUrl, file }: Props) {
   const addManualBox = useCallback(() => {
     if (!naturalSize) return
     const box = defaultCenterBox(naturalSize.w, naturalSize.h)
-    const entry: EditableBox = {
-      id: `manual-${crypto.randomUUID()}`,
-      label: 'table',
-      score: 0,
-      box,
-    }
-    setBoxes((prev) => [...prev, entry])
-    setSelectedId(entry.id)
+    const id = `manual-${crypto.randomUUID()}`
+    setBoxes((prev) => [
+      ...prev,
+      withTitleOnAppend(prev, {
+        id,
+        label: 'table',
+        score: 0,
+        box,
+      }),
+    ])
+    setSelectedId(id)
     setPhase('done')
     setEmptyHint(false)
     setError(null)
-  }, [naturalSize])
+  }, [naturalSize, setBoxes, setSelectedId])
 
   const removeSelected = useCallback(() => {
     if (!selectedId) return
@@ -274,16 +280,50 @@ export function TableDetectionPreview({ fileId, imageUrl, file }: Props) {
       </div>
 
       {boxes.length > 0 ? (
-        <ul className="space-y-1 text-xs text-muted-foreground" aria-live="polite">
+        <ul className="space-y-2" aria-live="polite">
           {boxes.map((b, i) => (
-            <li key={b.id}>
-              #{i + 1} — xmin {Math.round(b.box.xmin)}, ymin {Math.round(b.box.ymin)},
-              xmax {Math.round(b.box.xmax)}, ymax {Math.round(b.box.ymax)}
-              {b.score > 0 ? ` (신뢰도 ${(b.score * 100).toFixed(1)}%)` : ' (수동)'}
+            <li
+              key={b.id}
+              className={
+                b.id === selectedId
+                  ? 'rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5'
+                  : 'px-2 py-1.5'
+              }
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-foreground">#{i + 1}</span>
+                <label className="sr-only" htmlFor={`title-${b.id}`}>
+                  시트 이름
+                </label>
+                <input
+                  id={`title-${b.id}`}
+                  type="text"
+                  value={b.title}
+                  maxLength={31}
+                  onClick={() => setSelectedId(b.id)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setBoxes((prev) =>
+                      prev.map((item) =>
+                        item.id === b.id ? { ...item, title: value } : item,
+                      ),
+                    )
+                  }}
+                  className="min-w-[8rem] flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  placeholder="시트 이름"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {b.score > 0
+                    ? `신뢰도 ${(b.score * 100).toFixed(1)}%`
+                    : '수동'}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
       ) : null}
+
+      <TableExportPanel file={file} boxes={boxes} />
     </div>
   )
 }
