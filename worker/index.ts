@@ -5,6 +5,9 @@ import {
   requireSession,
 } from './auth'
 import { handleExtractTable } from './extract-table'
+import { handleHuggingFaceProxy } from './hf-proxy'
+
+export { UsExit } from './us-exit'
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -36,6 +39,10 @@ export default {
       const session = await requireSession(request, env)
       if (session instanceof Response) return session
       return handleExtractTable(request, env)
+    }
+
+    if (url.pathname === '/hf' || url.pathname.startsWith('/hf/')) {
+      return handleHuggingFaceProxy(request)
     }
 
     return env.ASSETS.fetch(request)

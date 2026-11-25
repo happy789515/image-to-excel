@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -59,34 +60,52 @@ export function BboxCropPanel({
     [boxes],
   )
 
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      const img = imageRef.current
-      const main = mainCanvasRef.current
-      setHasImage(Boolean(img?.naturalWidth))
-      if (!img?.naturalWidth || !main) return
+  const redraw = useCallback(() => {
+    const img = imageRef.current
+    const main = mainCanvasRef.current
+    if (!img?.naturalWidth || !main) {
+      setHasImage(false)
+      return false
+    }
+    setHasImage(true)
 
-      const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0]
-      if (selected) {
-        const ok = drawCropPreview(img, selected.box, main, {
-          padRatio: PREVIEW_PAD_RATIO,
-          maxDimension: 1600,
-        })
-        if (ok) refreshFitSize()
-      }
+    const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0]
+    if (!selected) return false
 
+    const ok = drawCropPreview(img, selected.box, main, {
+      padRatio: PREVIEW_PAD_RATIO,
+      maxDimension: 1600,
     })
+    if (ok) refreshFitSize()
+    return ok
+  }, [boxes, imageRef, refreshFitSize, selectedId])
+
+  const scheduleRedraw = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    let attempts = 0
+    const tick = () => {
+      if (redraw() || attempts >= 15) return
+      attempts += 1
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+  }, [redraw])
+
+  useLayoutEffect(() => {
+    scheduleRedraw()
     return () => cancelAnimationFrame(rafRef.current)
-  }, [imageRef, imageRevision, refreshFitSize, signature, boxes, selectedId])
+  }, [imageRef, imageRevision, scheduleRedraw, signature, selectedId])
 
   useEffect(() => {
     const host = viewportHostRef.current
     if (!host) return undefined
-    const observer = new ResizeObserver(() => refreshFitSize())
+    const observer = new ResizeObserver(() => {
+      redraw()
+      refreshFitSize()
+    })
     observer.observe(host)
     return () => observer.disconnect()
-  }, [refreshFitSize])
+  }, [redraw, refreshFitSize])
 
   const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0]
 
@@ -121,31 +140,32 @@ export function BboxCropPanel({
         )}
       >
         {!hasImage ? (
-          <p className="m-auto text-sm text-muted-foreground">원본 이미지 로딩 중…</p>
-        ) : (
-          <PanZoomViewport
-            className="min-h-0 flex-1"
-            minimap={{ kind: 'canvas', canvasRef: mainCanvasRef }}
-            resetKey={`${signature}:${selectedId ?? ''}:${fitSize?.w ?? 0}:${fitSize?.h ?? 0}`}
+          <p className="absolute inset-0 z-10 m-auto flex items-center justify-center text-sm text-muted-foreground">
+            원본 이미지 로딩 중…
+          </p>
+        ) : null}
+        <PanZoomViewport
+          className="min-h-0 flex-1"
+          minimap={{ kind: 'canvas', canvasRef: mainCanvasRef }}
+          resetKey={`${signature}:${selectedId ?? ''}:${fitSize?.w ?? 0}:${fitSize?.h ?? 0}`}
+        >
+          <div
+            className="relative shrink-0"
+            style={
+              fitSize
+                ? { width: fitSize.w, height: fitSize.h }
+                : undefined
+            }
           >
-            <div
-              className="relative shrink-0"
-              style={
-                fitSize
-                  ? { width: fitSize.w, height: fitSize.h }
-                  : undefined
+            <canvas
+              ref={mainCanvasRef}
+              className={cn('block size-full', !hasImage && 'invisible')}
+              aria-label={
+                selected ? `${selected.title} 잘라낸 영역` : '잘라낸 미리보기'
               }
-            >
-              <canvas
-                ref={mainCanvasRef}
-                className="block size-full"
-                aria-label={
-                  selected ? `${selected.title} 잘라낸 영역` : '잘라낸 미리보기'
-                }
-              />
-            </div>
-          </PanZoomViewport>
-        )}
+            />
+          </div>
+        </PanZoomViewport>
       </div>
     </div>
   )

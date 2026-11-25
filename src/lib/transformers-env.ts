@@ -7,14 +7,27 @@ const ORT_DIST = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_CDN_VERSION
 
 let configured = false
 
+function hubProxyBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'https://huggingface.co/'
+  }
+  // Vite `/hf` proxy cannot follow Hub redirects (`/api/resolve-cache` → SPA HTML).
+  // Local dev hits the Hub directly; production uses Worker `/hf/` (redirect: follow).
+  if (import.meta.env.DEV) {
+    return 'https://huggingface.co/'
+  }
+  return `${window.location.origin}/hf/`
+}
+
 /**
  * ONNX Runtime WASM is loaded from jsDelivr (not bundled into dist).
- * Required for Cloudflare Workers static asset 25 MiB limit.
+ * Model weights use same-origin `/hf/` (Worker → Hub proxy) to avoid CORS on deploy.
  */
 export function configureTransformersEnv(): void {
   if (configured) return
   configured = true
 
+  env.remoteHost = hubProxyBaseUrl()
   env.useWasmCache = false
   env.useBrowserCache = true
 

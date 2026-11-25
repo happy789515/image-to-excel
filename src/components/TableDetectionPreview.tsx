@@ -117,6 +117,8 @@ export function TableDetectionPreview({
   onPhase,
   onStepBridgeChange,
 }: Props) {
+  /** Canvas crop source — always decodable (detect grid may be max-h-0 on convert). */
+  const cropSourceRef = useRef<HTMLImageElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [workshopStep, setWorkshopStep] = useState<WorkshopStepId>('detect')
@@ -191,14 +193,14 @@ export function TableDetectionPreview({
 
   const refreshFitLayout = useCallback(() => {
     const host = viewportRef.current
-    const img = imgRef.current
-    if (!host || !img?.naturalWidth) return
+    const source = cropSourceRef.current
+    if (!host || !source?.naturalWidth) return
     const rect = host.getBoundingClientRect()
     if (rect.width < 1 || rect.height < 1) return
     setFitLayout(
       computeFitLayout(
-        img.naturalWidth,
-        img.naturalHeight,
+        source.naturalWidth,
+        source.naturalHeight,
         rect.width,
         rect.height,
       ),
@@ -206,9 +208,10 @@ export function TableDetectionPreview({
     setImageRevision((n) => n + 1)
   }, [])
 
-  const onImageLoad = useCallback(
+  const onCropSourceLoad = useCallback(
     (img: HTMLImageElement) => {
       setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+      setImageRevision((n) => n + 1)
       refreshFitLayout()
     },
     [refreshFitLayout],
@@ -221,6 +224,13 @@ export function TableDetectionPreview({
     observer.observe(host)
     return () => observer.disconnect()
   }, [refreshFitLayout, imageUrl])
+
+  useEffect(() => {
+    const source = cropSourceRef.current
+    if (source?.complete && source.naturalWidth > 0) {
+      onCropSourceLoad(source)
+    }
+  }, [imageUrl, onCropSourceLoad])
 
   const applyDetection = useCallback(
     (editable: EditableBox[], noTables: boolean) => {
@@ -504,6 +514,7 @@ export function TableDetectionPreview({
       }
       if (target === 'convert' && boxes.length > 0) {
         setWorkshopStep('convert')
+        setImageRevision((n) => n + 1)
         return
       }
       if (
@@ -612,6 +623,18 @@ export function TableDetectionPreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
+      <img
+        ref={cropSourceRef}
+        src={imageUrl}
+        alt=""
+        width={1}
+        height={1}
+        decoding="async"
+        loading="eager"
+        aria-hidden
+        className="pointer-events-none fixed left-0 top-0 opacity-0"
+        onLoad={(e) => onCropSourceLoad(e.currentTarget)}
+      />
       {workshopStep === 'detect' && error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -621,7 +644,9 @@ export function TableDetectionPreview({
       <div
         className={cn(
           'grid min-h-0 gap-3 overflow-hidden lg:grid-cols-2',
-          workshopStep === 'detect' ? 'min-h-0 flex-1' : 'hidden',
+          workshopStep === 'detect'
+            ? 'min-h-0 flex-1'
+            : 'pointer-events-none max-h-0 min-h-0 overflow-hidden opacity-0',
         )}
         aria-hidden={workshopStep !== 'detect'}
       >
@@ -679,7 +704,7 @@ export function TableDetectionPreview({
                       : 'block max-h-full max-w-full object-contain'
                   }
                   draggable={false}
-                  onLoad={(e) => onImageLoad(e.currentTarget)}
+                  onLoad={() => refreshFitLayout()}
                 />
                 {fitLayout && workshopStep === 'detect' ? (
                   <EditableBBoxLayer
@@ -701,7 +726,7 @@ export function TableDetectionPreview({
           className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card p-3"
         >
           <BboxCropPanel
-            imageRef={imgRef}
+            imageRef={cropSourceRef}
             imageRevision={imageRevision}
             boxes={boxes}
             selectedId={selectedId}
@@ -711,7 +736,7 @@ export function TableDetectionPreview({
 
       {workshopStep === 'detect' && boxes.length > 0 ? (
         <RegionSheetStrip
-          imageRef={imgRef}
+          imageRef={cropSourceRef}
           imageRevision={imageRevision}
           boxes={boxes}
           selectedId={selectedId}
@@ -742,7 +767,7 @@ export function TableDetectionPreview({
       {workshopStep === 'convert' ? (
         <>
           <ConvertStepView
-            imageRef={imgRef}
+            imageRef={cropSourceRef}
             imageRevision={imageRevision}
             boxes={boxes}
             selectedId={selectedId}
