@@ -1,14 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Images } from 'lucide-react'
 
 import { TableDetectionPreview } from '@/components/TableDetectionPreview'
 import { WorkshopSidebar } from '@/components/workshop/WorkshopSidebar'
 import { WorkflowStepBar } from '@/components/workshop/WorkflowStepBar'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { isImageFile } from '@/lib/image-upload'
 import type { WorkshopStepBridge } from '@/lib/workflow/workshop-step-bridge'
 import { useUploadQueue } from '@/lib/workflow/use-upload-queue'
 import { useWorkflowPhase } from '@/lib/workflow/use-workflow-phase'
 import type { WorkshopStepId } from '@/lib/workflow/workshop-steps'
 import type { WorkflowPhaseId } from '@/lib/workflow/types'
+import {
+  loadQueueWorkshopProgress,
+  progressFromStepAccess,
+  type FileWorkshopProgress,
+} from '@/lib/workshop-progress'
 
 export function Workshop() {
   const {
@@ -25,6 +40,48 @@ export function Workshop() {
 
   const { setWorkflowPhase } = useWorkflowPhase(activeId)
   const [stepBridge, setStepBridge] = useState<WorkshopStepBridge | null>(null)
+  const [pendingFileId, setPendingFileId] = useState<string | null>(null)
+  const [progressByFileId, setProgressByFileId] = useState<
+    Record<string, FileWorkshopProgress>
+  >({})
+
+  const queueKey = useMemo(
+    () => queue.map((item) => item.id).join('\0'),
+    [queue],
+  )
+
+  useEffect(() => {
+    const ids = queue.map((item) => item.id)
+    if (ids.length === 0) {
+      setProgressByFileId({})
+      return
+    }
+    void loadQueueWorkshopProgress(ids).then(setProgressByFileId)
+  }, [queueKey])
+
+  useEffect(() => {
+    if (!activeId || !stepBridge) return
+    setProgressByFileId((prev) => ({
+      ...prev,
+      [activeId]: progressFromStepAccess(
+        stepBridge.current,
+        stepBridge.access,
+        stepBridge.reviewCommitted,
+      ),
+    }))
+  }, [activeId, stepBridge])
+
+  const handleSelectFile = useCallback(
+    (id: string) => {
+      if (id === activeId) return
+      if (stepBridge?.reviewDirty) {
+        setPendingFileId(id)
+        return
+      }
+      setActiveId(id)
+    },
+    [activeId, setActiveId, stepBridge?.reviewDirty],
+  )
 
   const startedRef = useRef<Set<string>>(new Set())
 
@@ -37,15 +94,19 @@ export function Workshop() {
     }
   }, [activeItem, setWorkflowPhase])
 
-  const onPhase = (p: WorkflowPhaseId, detail?: string) =>
-    setWorkflowPhase(p, detail ?? null)
+  const onPhase = useCallback(
+    (p: WorkflowPhaseId, detail?: string) =>
+      setWorkflowPhase(p, detail ?? null),
+    [setWorkflowPhase],
+  )
 
   return (
     <div className="flex min-h-0 flex-1 w-full flex-col lg:flex-row">
       <WorkshopSidebar
         queue={queue}
         activeId={activeId}
-        onSelect={setActiveId}
+        progressByFileId={progressByFileId}
+        onSelect={handleSelectFile}
         onRemove={removeFile}
         onAppend={appendFiles}
         onClearAll={clearAll}
@@ -76,6 +137,43 @@ export function Workshop() {
           />
         </div>
       </div>
+
+      <Dialog
+        open={pendingFileId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFileId(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>저장되지 않은 변경사항</DialogTitle>
+            <DialogDescription>
+              검수 단계에서 수정한 내용이 아직 저장되지 않았습니다. 저장하지 않고
+              다른 이미지로 이동하면 변경 사항이 사라집니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingFileId(null)}
+            >
+              취소
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                const id = pendingFileId
+                setPendingFileId(null)
+                if (id) setActiveId(id)
+              }}
+            >
+              저장 안 함
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -91,9 +189,23 @@ function WorkPanel({
 }) {
   if (!activeItem) {
     return (
-      <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
-        이미지를 선택하면 검출 화면이 열립니다.
-      </p>
+      <div
+        className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center"
+        role="status"
+      >
+        <div
+          className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20"
+          aria-hidden
+        >
+          <Images className="size-8 text-primary" strokeWidth={1.75} />
+        </div>
+        <p className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          이미지를 선택해 주세요
+        </p>
+        <p className="max-w-md text-sm text-muted-foreground sm:text-base">
+          왼쪽 목록에서 이미지를 고르면 표 검출 화면이 열립니다.
+        </p>
+      </div>
     )
   }
 

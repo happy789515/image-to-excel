@@ -25,12 +25,15 @@ import {
   MAX_IMAGE_FILES,
   UPLOAD_ACCEPT_LABEL,
 } from '@/lib/image-upload'
+import { FileQueueStepProgress } from '@/components/workshop/FileQueueStepProgress'
+import type { FileWorkshopProgress } from '@/lib/workshop-progress'
 import type { QueuedImage } from '@/lib/workflow/use-upload-queue'
 import { cn } from 'cn'
 
 type Props = {
   queue: QueuedImage[]
   activeId: string | null
+  progressByFileId: Record<string, FileWorkshopProgress>
   onSelect: (id: string) => void
   onRemove: (id: string) => void
   onAppend: (accepted: File[], rejected: FileRejection[]) => void
@@ -42,6 +45,7 @@ type Props = {
 export function WorkshopSidebar({
   queue,
   activeId,
+  progressByFileId,
   onSelect,
   onRemove,
   onAppend,
@@ -171,38 +175,45 @@ export function WorkshopSidebar({
             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
               {queue.map((item) => (
                 <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(item.id)}
+                  <div
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-lg border border-transparent bg-card px-2 py-2 text-left transition-colors hover:bg-background',
+                      'flex w-full items-center gap-1 rounded-lg border border-transparent bg-card px-2 py-2 transition-colors',
                       activeId === item.id &&
                         'border-primary/30 bg-primary/10 ring-1 ring-inset ring-primary/25',
                     )}
                   >
-                    <ThumbPreview file={item.file} previewUrl={item.previewUrl} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium">
-                        {item.file.name}
+                    <button
+                      type="button"
+                      onClick={() => onSelect(item.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:bg-background"
+                    >
+                      <ThumbPreview file={item.file} previewUrl={item.previewUrl} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium">
+                          {item.file.name}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatFileSize(item.file.size)}
+                        </span>
+                        {isImageFile(item.file) ? (
+                          <FileQueueStepProgress
+                            progress={progressByFileId[item.id]}
+                            className="mt-1"
+                          />
+                        ) : null}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {formatFileSize(item.file.size)}
-                      </span>
-                    </span>
+                    </button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
                       className="shrink-0"
                       aria-label={`${item.file.name} 제거`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onRemove(item.id)
-                      }}
+                      onClick={() => onRemove(item.id)}
                     >
                       <X />
                     </Button>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
