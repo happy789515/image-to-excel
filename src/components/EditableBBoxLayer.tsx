@@ -7,7 +7,15 @@ import {
   type RefObject,
   type SetStateAction,
 } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 
+import { BboxRenameDialog } from '@/components/BboxRenameDialog'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import {
   clampBox,
   clientToNatural,
@@ -22,6 +30,13 @@ export type EditableBox = TableDetectionBox & { id: string; title: string }
 
 type Handle = 'nw' | 'ne' | 'sw' | 'se' | 'move'
 
+const HANDLE_CURSOR: Record<Exclude<Handle, 'move'>, string> = {
+  nw: 'cursor-nw-resize',
+  ne: 'cursor-ne-resize',
+  sw: 'cursor-sw-resize',
+  se: 'cursor-se-resize',
+}
+
 type DragState = {
   handle: Handle
   boxId: string
@@ -35,6 +50,7 @@ type Props = {
   selectedId: string | null
   onSelect: (id: string | null) => void
   onChange: Dispatch<SetStateAction<EditableBox[]>>
+  onRemove?: (id: string) => void
   imageRef: RefObject<HTMLImageElement | null>
 }
 
@@ -60,10 +76,14 @@ export function EditableBBoxLayer({
   selectedId,
   onSelect,
   onChange,
+  onRemove,
   imageRef,
 }: Props) {
   const [layout, setLayout] = useState<ImageLayout | null>(null)
   const dragRef = useRef<DragState | null>(null)
+  const [renameId, setRenameId] = useState<string | null>(null)
+
+  const renameBox = boxes.find((b) => b.id === renameId) ?? null
 
   const refreshLayout = useCallback(() => {
     const img = imageRef.current
@@ -174,6 +194,7 @@ export function EditableBBoxLayer({
     handle: Handle,
     origin: TableDetectionBox['box'],
   ) => {
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     const img = imageRef.current
@@ -192,62 +213,123 @@ export function EditableBBoxLayer({
     }
   }
 
+  const removeBox = (id: string) => {
+    if (onRemove) {
+      onRemove(id)
+      return
+    }
+    onChange((prev) => prev.filter((item) => item.id !== id))
+    if (selectedId === id) onSelect(null)
+  }
+
+  const saveRename = (id: string, title: string) => {
+    onChange((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, title } : item)),
+    )
+  }
+
   if (!layout) return null
 
   return (
-    <div
-      className="absolute touch-none"
-      style={{
-        left: layout.offsetX,
-        top: layout.offsetY,
-        width: layout.renderedW,
-        height: layout.renderedH,
-      }}
-      onPointerDown={() => onSelect(null)}
-    >
-      {boxes.map((item, index) => {
-        const { xmin, ymin, xmax, ymax } = item.box
-        const left = (xmin / layout.naturalW) * 100
-        const top = (ymin / layout.naturalH) * 100
-        const width = ((xmax - xmin) / layout.naturalW) * 100
-        const height = ((ymax - ymin) / layout.naturalH) * 100
-        const selected = item.id === selectedId
+    <>
+      <div
+        className={cn(
+          'absolute touch-none',
+          'group-data-[pan-cursor]/panzoom:cursor-grab group-data-[pan-cursor]/panzoom:active:cursor-grabbing',
+        )}
+        style={{
+          left: layout.offsetX,
+          top: layout.offsetY,
+          width: layout.renderedW,
+          height: layout.renderedH,
+        }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          onSelect(null)
+        }}
+      >
+        {boxes.map((item, index) => {
+          const { xmin, ymin, xmax, ymax } = item.box
+          const left = (xmin / layout.naturalW) * 100
+          const top = (ymin / layout.naturalH) * 100
+          const width = ((xmax - xmin) / layout.naturalW) * 100
+          const height = ((ymax - ymin) / layout.naturalH) * 100
+          const selected = item.id === selectedId
 
-        return (
-          <div
-            key={item.id}
-            className={cn(
-              'absolute border-2 bg-primary/15',
-              selected ? 'border-primary ring-2 ring-primary/30' : 'border-primary/80',
-            )}
-            style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              startDrag(e, item.id, 'move', item.box)
-            }}
-          >
-            <span className="pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
-              #{index + 1}{' '}
-              {item.score > 0 ? `${(item.score * 100).toFixed(0)}%` : '수동'}
-            </span>
-            {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-              <button
-                key={corner}
-                type="button"
-                aria-label={`영역 ${index + 1} ${corner} 모서리 조절`}
+          return (
+            <ContextMenu
+              key={item.id}
+              onOpenChange={(open) => {
+                if (open) onSelect(item.id)
+              }}
+            >
+              <ContextMenuTrigger
+                data-pan-zoom-block
                 className={cn(
-                  'absolute size-3 rounded-sm border border-primary-foreground bg-primary',
-                  corner === 'nw' && '-left-1.5 -top-1.5',
-                  corner === 'ne' && '-right-1.5 -top-1.5',
-                  corner === 'sw' && '-bottom-1.5 -left-1.5',
-                  corner === 'se' && '-bottom-1.5 -right-1.5',
+                  'absolute cursor-move border-2 bg-primary/15 transition-colors',
+                  selected
+                    ? 'border-primary ring-2 ring-primary/30'
+                    : 'border-primary/80 hover:border-primary hover:bg-primary/25',
                 )}
-                onPointerDown={(e) => startDrag(e, item.id, corner, item.box)}
-              />
-            ))}
-          </div>
-        )
-      })}
-    </div>
+                style={{
+                  left: `${left}%`,
+                  top: `${top}%`,
+                  width: `${width}%`,
+                  height: `${height}%`,
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  startDrag(e, item.id, 'move', item.box)
+                }}
+              >
+                <span className="pointer-events-none absolute left-0 top-0 max-w-full truncate rounded-br bg-primary px-1 py-0.5 text-[10px] font-medium leading-none text-primary-foreground">
+                  #{index + 1}{' '}
+                  <span className="font-normal opacity-90">{item.title}</span>
+                </span>
+                {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    aria-label={`영역 ${index + 1} ${corner} 모서리 조절`}
+                    className={cn(
+                      'absolute z-10 size-3 rounded-sm border border-primary-foreground bg-primary shadow-sm',
+                      'transition-[transform,box-shadow,background-color,border-color]',
+                      'hover:scale-125 hover:border-primary hover:bg-primary-foreground hover:shadow-md',
+                      'active:scale-110',
+                      HANDLE_CURSOR[corner],
+                      corner === 'nw' && '-left-1.5 -top-1.5',
+                      corner === 'ne' && '-right-1.5 -top-1.5',
+                      corner === 'sw' && '-bottom-1.5 -left-1.5',
+                      corner === 'se' && '-bottom-1.5 -right-1.5',
+                    )}
+                    onPointerDown={(e) => startDrag(e, item.id, corner, item.box)}
+                  />
+                ))}
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => setRenameId(item.id)}>
+                  <Pencil aria-hidden />
+                  시트 이름 변경
+                </ContextMenuItem>
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => removeBox(item.id)}
+                >
+                  <Trash2 aria-hidden />
+                  영역 삭제
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )
+        })}
+      </div>
+
+      <BboxRenameDialog
+        open={renameId !== null}
+        title={renameBox?.title ?? ''}
+        onOpenChange={(open) => !open && setRenameId(null)}
+        onSave={(title) => renameId && saveRename(renameId, title)}
+      />
+    </>
   )
 }

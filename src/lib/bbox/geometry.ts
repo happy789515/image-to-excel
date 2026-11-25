@@ -12,17 +12,40 @@ export type ImageLayout = {
   scale: number
 }
 
+export function computeFitLayout(
+  naturalW: number,
+  naturalH: number,
+  containerW: number,
+  containerH: number,
+): ImageLayout {
+  const scale = Math.min(containerW / naturalW, containerH / naturalH)
+  const renderedW = naturalW * scale
+  const renderedH = naturalH * scale
+  return {
+    naturalW,
+    naturalH,
+    renderedW,
+    renderedH,
+    offsetX: 0,
+    offsetY: 0,
+    scale,
+  }
+}
+
 export function computeImageLayout(img: HTMLImageElement): ImageLayout | null {
   const naturalW = img.naturalWidth
   const naturalH = img.naturalHeight
   if (!naturalW || !naturalH) return null
 
-  const rect = img.getBoundingClientRect()
-  const scale = Math.min(rect.width / naturalW, rect.height / naturalH)
+  const layoutW = img.clientWidth
+  const layoutH = img.clientHeight
+  if (!layoutW || !layoutH) return null
+
+  const scale = Math.min(layoutW / naturalW, layoutH / naturalH)
   const renderedW = naturalW * scale
   const renderedH = naturalH * scale
-  const offsetX = (rect.width - renderedW) / 2
-  const offsetY = (rect.height - renderedH) / 2
+  const offsetX = (layoutW - renderedW) / 2
+  const offsetY = (layoutH - renderedH) / 2
 
   return {
     naturalW,
@@ -69,8 +92,15 @@ export function clientToNatural(
   if (!layout) return null
 
   const rect = img.getBoundingClientRect()
-  const localX = clientX - rect.left - layout.offsetX
-  const localY = clientY - rect.top - layout.offsetY
+  const layoutW = img.clientWidth
+  const layoutH = img.clientHeight
+  if (!layoutW || !layoutH) return null
+
+  const sx = rect.width / layoutW
+  const sy = rect.height / layoutH
+
+  const localX = (clientX - rect.left) / sx - layout.offsetX
+  const localY = (clientY - rect.top) / sy - layout.offsetY
 
   if (localX < 0 || localY < 0 || localX > layout.renderedW || localY > layout.renderedH) {
     return null
