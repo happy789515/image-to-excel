@@ -690,7 +690,7 @@ export function TableDetectionPreview({
               transition={stepTransition}
             >
       <div
-        className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-2"
+        className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-hidden"
       >
         <section
           aria-label="원본 이미지"

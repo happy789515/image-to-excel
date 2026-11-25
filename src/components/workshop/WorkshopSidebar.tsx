@@ -88,7 +88,7 @@ export function WorkshopSidebar({
   }
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-72 lg:max-w-[min(100%,20rem)] xl:w-80">
+    <aside className="flex h-full w-72 max-w-[min(100%,20rem)] shrink-0 min-w-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="border-b border-sidebar-border px-3 py-3">
         <p className="text-sm font-semibold text-foreground">이미지</p>
         <p className="text-xs text-muted-foreground">
