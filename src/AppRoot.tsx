@@ -40,12 +40,14 @@ export function AppRoot() {
 
   return (
     <>
-      <ThemeToggle className="fixed top-4 right-4 z-50 sm:top-5 sm:right-6" />
       {!ready ? (
-        <BootScreen
-          phase={phase}
-          onRetry={phase.id === 'error' ? handleRetry : undefined}
-        />
+        <>
+          <ThemeToggle className="fixed top-4 right-4 z-50 sm:top-5 sm:right-6" />
+          <BootScreen
+            phase={phase}
+            onRetry={phase.id === 'error' ? handleRetry : undefined}
+          />
+        </>
       ) : (
         <App />
       )}
