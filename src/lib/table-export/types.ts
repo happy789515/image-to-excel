@@ -1,5 +1,4 @@
 import type { ExportSheet } from '@/lib/excel/build-xlsx'
-import type { PreprocessPreset } from '@/lib/image/preprocess-types'
 
 export type ExportPhase =
   | 'idle'
@@ -19,7 +18,6 @@ export type ExportProgress = {
 }
 
 export type RunExportOptions = {
-  preset: PreprocessPreset
   signal?: AbortSignal
   onProgress?: (p: ExportProgress) => void
 }

@@ -44,7 +44,6 @@ export async function runTableExport(
     throw new Error('PDF는 아직 Excel 변환을 지원하지 않습니다.')
   }
 
-  const deskew = options.preset === 'photo'
   const sheets: ExportSheet[] = []
   const sheetCount = boxes.length
 
@@ -61,7 +60,7 @@ export async function runTableExport(
       sheetCount,
     })
 
-    const tableBase = await cropTableRegion(file, box.box, { deskew })
+    const tableBase = await cropTableRegion(file, box.box)
 
     report(options, {
       phase: 'gemini',
