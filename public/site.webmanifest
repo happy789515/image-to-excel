@@ -1,0 +1,17 @@
+{
+  "name": "Image to Excel",
+  "short_name": "Img2XLS",
+  "description": "이미지 속 표를 검출하고 Excel로 내보냅니다.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "theme_color": "#2a9d74",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "lang": "ko"
+}

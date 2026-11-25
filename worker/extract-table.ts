@@ -1,4 +1,8 @@
 import {
+  clientStatusFromGeminiUpstream,
+  workerExtractTableErrorMessage,
+} from './extract-table-errors'
+import {
   GEMINI_API_BASE,
   GEMINI_MODEL,
   GENERATION_CONFIG,
@@ -54,27 +58,30 @@ export async function handleExtractTable(
   env: Env,
 ): Promise<Response> {
   if (!env.GEMINI_API_KEY) {
-    return jsonError(500, 'GEMINI_API_KEY is not configured')
+    return jsonError(500, workerExtractTableErrorMessage(500))
   }
 
   let body: ExtractRequestBody
   try {
     body = (await request.json()) as ExtractRequestBody
   } catch {
-    return jsonError(400, 'Invalid JSON body')
+    return jsonError(400, workerExtractTableErrorMessage(400))
   }
 
   const { mimeType, sheetName } = body
   if (!body.imageBase64 || typeof body.imageBase64 !== 'string') {
-    return jsonError(400, 'imageBase64 is required')
+    return jsonError(
+      400,
+      '이미지 데이터가 없습니다. 영역을 선택한 뒤 다시 시도해 주세요.',
+    )
   }
   if (!mimeType || !ALLOWED_MIME.has(mimeType)) {
-    return jsonError(400, 'mimeType must be image/png, image/jpeg, or image/webp')
+    return jsonError(400, '지원하지 않는 이미지 형식입니다. (PNG, JPEG, WebP)')
   }
 
   const imageBase64 = stripDataUrlPrefix(body.imageBase64)
   if (estimateBase64Bytes(imageBase64) > MAX_IMAGE_BYTES) {
-    return jsonError(413, 'Image exceeds 8 MiB limit')
+    return jsonError(413, workerExtractTableErrorMessage(413))
   }
 
   const sheetLabel =
@@ -115,28 +122,39 @@ export async function handleExtractTable(
     body: JSON.stringify(geminiBody),
   })
 
-  const raw = (await upstream.json()) as GeminiGenerateResponse
+  let raw: GeminiGenerateResponse
+  try {
+    raw = (await upstream.json()) as GeminiGenerateResponse
+  } catch {
+    const status = clientStatusFromGeminiUpstream(upstream.status)
+    return jsonError(status, workerExtractTableErrorMessage(status))
+  }
 
   if (!upstream.ok) {
-    const detail =
-      raw.error?.message ?? `Gemini request failed (${upstream.status})`
-    return jsonError(502, detail)
+    const status = clientStatusFromGeminiUpstream(upstream.status)
+    return jsonError(status, workerExtractTableErrorMessage(status))
   }
 
   const text = raw.candidates?.[0]?.content?.parts?.[0]?.text
   if (!text) {
-    return jsonError(502, 'Empty response from Gemini')
+    return jsonError(502, 'Gemini가 빈 응답을 반환했습니다. 다시 시도해 주세요.')
   }
 
   let parsed: TableExtractJson
   try {
     parsed = JSON.parse(text) as TableExtractJson
   } catch {
-    return jsonError(502, 'Gemini returned non-JSON text')
+    return jsonError(
+      502,
+      '표 구조를 JSON으로 읽지 못했습니다. 영역을 조정한 뒤 다시 시도해 주세요.',
+    )
   }
 
   if (!parsed.name || !Array.isArray(parsed.rows)) {
-    return jsonError(502, 'Gemini JSON missing name or rows')
+    return jsonError(
+      502,
+      '표 데이터가 불완전합니다. 영역을 다시 확인해 주세요.',
+    )
   }
 
   return Response.json(parsed)

@@ -8,6 +8,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,12 @@ import {
 import { FileQueueStepProgress } from '@/components/workshop/FileQueueStepProgress'
 import type { FileWorkshopProgress } from '@/lib/workshop-progress'
 import type { QueuedImage } from '@/lib/workflow/use-upload-queue'
+import {
+  listItemTransition,
+  motionInitial,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { fadeSlideFromLeft } from '@/lib/motion/variants'
 import { cn } from 'cn'
 
 type Props = {
@@ -53,6 +60,9 @@ export function WorkshopSidebar({
   accept,
   error,
 }: Props) {
+  const reduced = useReducedMotion()
+  const itemTransition = listItemTransition(reduced)
+
   const onDrop = useCallback(
     (accepted: File[], rejected: FileRejection[]) => {
       onAppend(accepted, rejected)
@@ -87,17 +97,24 @@ export function WorkshopSidebar({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-        <div
-          {...getRootProps()}
-          className={cn(
-            'flex shrink-0 flex-col items-center gap-2 rounded-xl border border-dashed border-sidebar-border px-3 py-4 text-center transition-colors',
-            'bg-card hover:border-primary/35',
-            isDragActive &&
-              !isDragReject &&
-              'border-primary bg-primary/8 ring-2 ring-primary/20',
-            isDragReject && 'border-destructive bg-destructive/5',
-          )}
+        <m.div
+          animate={{
+            scale: !reduced && isDragActive && !isDragReject ? 1.02 : 1,
+          }}
+          transition={itemTransition}
+          className="shrink-0"
         >
+          <div
+            {...getRootProps()}
+            className={cn(
+              'flex flex-col items-center gap-2 rounded-xl border border-dashed border-sidebar-border px-3 py-4 text-center transition-colors',
+              'bg-card hover:border-primary/35',
+              isDragActive &&
+                !isDragReject &&
+                'border-primary bg-primary/8 ring-2 ring-primary/20',
+              isDragReject && 'border-destructive bg-destructive/5',
+            )}
+          >
           <input {...getInputProps()} aria-label="이미지 파일 선택" />
           <div className="flex size-10 items-center justify-center rounded-full bg-background ring-1 ring-border">
             {isDragReject ? (
@@ -118,7 +135,8 @@ export function WorkshopSidebar({
           <Button type="button" variant="secondary" size="sm" onClick={open}>
             파일 업로드
           </Button>
-        </div>
+          </div>
+        </m.div>
 
         {error ? (
           <Alert variant="destructive" className="shrink-0 py-2">
@@ -173,49 +191,20 @@ export function WorkshopSidebar({
               </DialogContent>
             </Dialog>
             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-              {queue.map((item) => (
-                <li key={item.id}>
-                  <div
-                    className={cn(
-                      'flex w-full items-center gap-1 rounded-lg border border-transparent bg-card px-2 py-2 transition-colors',
-                      activeId === item.id &&
-                        'border-primary/30 bg-primary/10 ring-1 ring-inset ring-primary/25',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelect(item.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:bg-background"
-                    >
-                      <ThumbPreview file={item.file} previewUrl={item.previewUrl} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium">
-                          {item.file.name}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatFileSize(item.file.size)}
-                        </span>
-                        {isImageFile(item.file) ? (
-                          <FileQueueStepProgress
-                            progress={progressByFileId[item.id]}
-                            className="mt-1"
-                          />
-                        ) : null}
-                      </span>
-                    </button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="shrink-0"
-                      aria-label={`${item.file.name} 제거`}
-                      onClick={() => onRemove(item.id)}
-                    >
-                      <X />
-                    </Button>
-                  </div>
-                </li>
-              ))}
+              <AnimatePresence initial={false}>
+                {queue.map((item) => (
+                  <QueueRow
+                    key={item.id}
+                    item={item}
+                    active={activeId === item.id}
+                    progress={progressByFileId[item.id]}
+                    reduced={reduced}
+                    transition={itemTransition}
+                    onSelect={() => onSelect(item.id)}
+                    onRemove={() => onRemove(item.id)}
+                  />
+                ))}
+              </AnimatePresence>
             </ul>
           </>
         ) : (
@@ -225,6 +214,79 @@ export function WorkshopSidebar({
         )}
       </div>
     </aside>
+  )
+}
+
+function QueueRow({
+  item,
+  active,
+  progress,
+  reduced,
+  transition,
+  onSelect,
+  onRemove,
+}: {
+  item: QueuedImage
+  active: boolean
+  progress: FileWorkshopProgress | undefined
+  reduced: boolean
+  transition: ReturnType<typeof listItemTransition>
+  onSelect: () => void
+  onRemove: () => void
+}) {
+  return (
+    <m.li
+      layout={!reduced}
+      variants={fadeSlideFromLeft}
+      initial={motionInitial(reduced)}
+      animate="animate"
+      exit="exit"
+      transition={transition}
+    >
+      <div
+        className={cn(
+          'relative flex w-full items-center gap-1 rounded-lg border border-transparent bg-card px-2 py-2 transition-colors',
+          active && 'border-primary/30 bg-primary/10 ring-1 ring-inset ring-primary/25',
+        )}
+      >
+        {active && !reduced ? (
+          <m.span
+            layoutId="sidebar-active-accent"
+            className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-primary"
+            transition={transition}
+            aria-hidden
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={onSelect}
+          className="relative flex min-w-0 flex-1 items-center gap-2 rounded-md pl-1 text-left transition-colors hover:bg-background"
+        >
+          <ThumbPreview file={item.file} previewUrl={item.previewUrl} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium">
+              {item.file.name}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {formatFileSize(item.file.size)}
+            </span>
+            {isImageFile(item.file) ? (
+              <FileQueueStepProgress progress={progress} className="mt-1" />
+            ) : null}
+          </span>
+        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0"
+          aria-label={`${item.file.name} 제거`}
+          onClick={onRemove}
+        >
+          <X />
+        </Button>
+      </div>
+    </m.li>
   )
 }
 

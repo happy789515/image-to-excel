@@ -82,6 +82,19 @@ import {
 import type { WorkflowPhaseId } from '@/lib/workflow/types'
 import type { StepAccess } from '@/components/workshop/WorkflowStepBar'
 import { PanZoomViewport } from '@/components/PanZoomViewport'
+import {
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import {
+  fadeUp,
+  panelSwitchForward,
+  springSnappy,
+  staggerContainerFast,
+  staggerItem,
+} from '@/lib/motion/variants'
+import { AnimatePresence, m } from 'motion/react'
 import { cn } from 'cn'
 
 type Props = {
@@ -603,23 +616,35 @@ export function TableDetectionPreview({
 
   useEffect(() => {
     onStepBridgeChange?.({
+      fileId,
       current: workshopStep,
       access: stepAccess,
       busy,
       navigate: attemptNavigateStep,
       reviewDirty,
       reviewCommitted,
+      exportReady: Boolean(exportSheets?.length && !exportStale),
     })
-    return () => onStepBridgeChange?.(null)
   }, [
     attemptNavigateStep,
     busy,
+    exportSheets?.length,
+    exportStale,
+    fileId,
     onStepBridgeChange,
     reviewCommitted,
     reviewDirty,
     stepAccess,
     workshopStep,
   ])
+
+  useEffect(() => {
+    return () => onStepBridgeChange?.(null)
+  }, [fileId, onStepBridgeChange])
+
+  const reduced = useReducedMotion()
+  const stepTransition = motionTransition(reduced, springSnappy)
+  const stepVariants = panelSwitchForward
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -635,20 +660,37 @@ export function TableDetectionPreview({
         className="pointer-events-none fixed left-0 top-0 opacity-0"
         onLoad={(e) => onCropSourceLoad(e.currentTarget)}
       />
-      {workshopStep === 'detect' && error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {workshopStep === 'detect' && error ? (
+          <m.div
+            key="detect-error"
+            variants={fadeUp}
+            initial={motionInitial(reduced)}
+            animate="animate"
+            exit="exit"
+            transition={stepTransition}
+          >
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </m.div>
+        ) : null}
+      </AnimatePresence>
 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <AnimatePresence mode="wait" initial={false}>
+          {workshopStep === 'detect' ? (
+            <m.div
+              key="detect"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+              variants={stepVariants}
+              initial={motionInitial(reduced)}
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+            >
       <div
-        className={cn(
-          'grid min-h-0 gap-3 overflow-hidden lg:grid-cols-2',
-          workshopStep === 'detect'
-            ? 'min-h-0 flex-1'
-            : 'pointer-events-none max-h-0 min-h-0 overflow-hidden opacity-0',
-        )}
-        aria-hidden={workshopStep !== 'detect'}
+        className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-2"
       >
         <section
           aria-label="원본 이미지"
@@ -734,88 +776,118 @@ export function TableDetectionPreview({
         </section>
       </div>
 
-      {workshopStep === 'detect' && boxes.length > 0 ? (
-        <RegionSheetStrip
-          imageRef={cropSourceRef}
-          imageRevision={imageRevision}
-          boxes={boxes}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onTitleChange={(id, title) => {
-            setBoxes((prev) =>
-              prev.map((item) => (item.id === id ? { ...item, title } : item)),
-            )
-          }}
-          onDelete={removeBoxById}
-          action={
-            <Button
-              type="button"
-              className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
-              disabled={boxes.length === 0 || phase === 'detecting'}
-              onClick={() => attemptNavigateStep('convert')}
+      {boxes.length > 0 ? (
+        <m.div
+          variants={staggerContainerFast}
+          initial={motionInitial(reduced)}
+          animate="animate"
+        >
+          <m.div variants={staggerItem} transition={stepTransition}>
+            <RegionSheetStrip
+              imageRef={cropSourceRef}
+              imageRevision={imageRevision}
+              boxes={boxes}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onTitleChange={(id, title) => {
+                setBoxes((prev) =>
+                  prev.map((item) => (item.id === id ? { ...item, title } : item)),
+                )
+              }}
+              onDelete={removeBoxById}
+              action={
+                <Button
+                  type="button"
+                  className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
+                  disabled={boxes.length === 0 || phase === 'detecting'}
+                  onClick={() => attemptNavigateStep('convert')}
+                >
+                  <Table2 className="size-5" aria-hidden />
+                  <span className="flex items-center gap-0.5">
+                    엑셀 변환
+                    <ChevronRight className="size-4" aria-hidden />
+                  </span>
+                </Button>
+              }
+            />
+          </m.div>
+        </m.div>
+      ) : null}
+            </m.div>
+          ) : null}
+
+          {workshopStep === 'convert' ? (
+            <m.div
+              key="convert"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+              variants={stepVariants}
+              initial={motionInitial(reduced)}
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
             >
-              <Table2 className="size-5" aria-hidden />
-              <span className="flex items-center gap-0.5">
-                엑셀 변환
-                <ChevronRight className="size-4" aria-hidden />
-              </span>
-            </Button>
-          }
-        />
-      ) : null}
-
-      {workshopStep === 'convert' ? (
-        <>
-          <ConvertStepView
-            imageRef={cropSourceRef}
-            imageRevision={imageRevision}
-            boxes={boxes}
-            selectedId={selectedId}
-            onSelectBox={setSelectedId}
-            sheets={exportStale ? null : exportSheets}
-            activeSheetIndex={activeSheetIndex}
-            onSelectSheetIndex={(index) => {
-              setSelectedId(boxes[index]?.id ?? null)
-            }}
-            onSheetsChange={handleConvertSheetsChange}
-            converting={converting}
-            exportActions={<TableExportActions {...exportCtrl} size="xs" />}
-            sheetStripAction={
-              <Button
-                type="button"
-                className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
-                disabled={
-                  !exportSheets?.length ||
-                  exportStale ||
-                  converting ||
-                  !exportBlob
+              <ConvertStepView
+                imageRef={cropSourceRef}
+                imageRevision={imageRevision}
+                boxes={boxes}
+                selectedId={selectedId}
+                onSelectBox={setSelectedId}
+                sheets={exportStale ? null : exportSheets}
+                activeSheetIndex={activeSheetIndex}
+                onSelectSheetIndex={(index) => {
+                  setSelectedId(boxes[index]?.id ?? null)
+                }}
+                onSheetsChange={handleConvertSheetsChange}
+                converting={converting}
+                exportActions={<TableExportActions {...exportCtrl} size="xs" />}
+                sheetStripAction={
+                  <Button
+                    type="button"
+                    className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
+                    disabled={
+                      !exportSheets?.length ||
+                      exportStale ||
+                      converting ||
+                      !exportBlob
+                    }
+                    onClick={() => attemptNavigateStep('review')}
+                  >
+                    <Download className="size-5" aria-hidden />
+                    <span className="flex items-center gap-0.5">
+                      검수 및 다운로드
+                      <ChevronRight className="size-4" aria-hidden />
+                    </span>
+                  </Button>
                 }
-                onClick={() => attemptNavigateStep('review')}
-              >
-                <Download className="size-5" aria-hidden />
-                <span className="flex items-center gap-0.5">
-                  검수 및 다운로드
-                  <ChevronRight className="size-4" aria-hidden />
-                </span>
-              </Button>
-            }
-          />
+              />
 
-          <TableExportStatus {...exportCtrl} />
-        </>
-      ) : null}
+              <TableExportStatus {...exportCtrl} />
+            </m.div>
+          ) : null}
 
-      {workshopStep === 'review' && exportSheets && exportBlob ? (
-        <ReviewStepView
-          committedSheets={exportSheets}
-          activeIndex={activeSheetIndex}
-          onSelectIndex={(index) => setSelectedId(boxes[index]?.id ?? null)}
-          downloadFileName={downloadFileName}
-          reviewCommitted={reviewCommitted}
-          onDirtyChange={setReviewDirty}
-          onCommit={handleReviewCommit}
-        />
-      ) : null}
+          {workshopStep === 'review' && exportSheets && exportBlob ? (
+            <m.div
+              key="review"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              variants={stepVariants}
+              initial={motionInitial(reduced)}
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+            >
+              <ReviewStepView
+                committedSheets={exportSheets}
+                activeIndex={activeSheetIndex}
+                onSelectIndex={(index) => setSelectedId(boxes[index]?.id ?? null)}
+                downloadFileName={downloadFileName}
+                reviewCommitted={reviewCommitted}
+                onDirtyChange={setReviewDirty}
+                onCommit={handleReviewCommit}
+              />
+            </m.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
 
       <Dialog open={discardReviewOpen} onOpenChange={setDiscardReviewOpen}>
         <DialogContent className="sm:max-w-sm" showCloseButton>

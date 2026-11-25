@@ -15,6 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { PanZoomViewport } from '@/components/PanZoomViewport'
 import { drawCropPreview, PREVIEW_PAD_RATIO } from '@/lib/image/crop'
+import {
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { springSnappy } from '@/lib/motion/variants'
+import { m } from 'motion/react'
 import { cn } from 'cn'
 
 function boxKey(box: EditableBox['box']): string {
@@ -44,6 +50,9 @@ export function RegionSheetStrip({
   action,
   className,
 }: Props) {
+  const reduced = useReducedMotion()
+  const layoutTransition = motionTransition(reduced, springSnappy)
+
   const thumbRefs = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const rafRef = useRef(0)
 
@@ -137,12 +146,25 @@ export function RegionSheetStrip({
             {boxes.map((b, i) => {
               const active = b.id === selectedId
               return (
-                <Card
+                <m.div
                   key={b.id}
+                  layout={!reduced}
+                  transition={layoutTransition}
+                  className="relative w-[11.5rem] shrink-0"
+                >
+                  {active && !reduced ? (
+                    <m.span
+                      layoutId="region-sheet-active"
+                      className="pointer-events-none absolute inset-0 z-0 rounded-xl border border-primary/50 bg-primary/10"
+                      transition={layoutTransition}
+                      aria-hidden
+                    />
+                  ) : null}
+                <Card
                   size="sm"
                   className={cn(
-                    'w-[11.5rem] shrink-0 border border-border bg-card py-0 ring-0 transition-colors',
-                    active && 'border-primary/50 bg-primary/10',
+                    'relative z-10 w-full border border-border bg-card py-0 ring-0 transition-colors',
+                    active && 'border-primary/50 bg-transparent',
                     !active && 'hover:bg-muted/40',
                   )}
                 >
@@ -203,6 +225,7 @@ export function RegionSheetStrip({
                     </Badge>
                   </CardFooterInner>
                 </Card>
+                </m.div>
               )
             })}
           </div>

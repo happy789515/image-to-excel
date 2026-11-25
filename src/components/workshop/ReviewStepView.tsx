@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, FileSpreadsheet, Save } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import { EditableExcelSheetTable } from '@/components/EditableExcelSheetTable'
 import { SheetTabStrip } from '@/components/workshop/SheetTabStrip'
@@ -8,6 +9,13 @@ import { buildXlsxBlob } from '@/lib/excel/build-xlsx'
 import type { ExportSheet } from '@/lib/excel/build-xlsx'
 import { exportSheetsEqual } from '@/lib/excel/sheets-equal'
 import { downloadXlsxFile } from '@/lib/excel/download-xlsx'
+import {
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { scaleInTight, springSnappy } from '@/lib/motion/variants'
+import { cn } from 'cn'
 
 type Props = {
   committedSheets: ExportSheet[]
@@ -109,6 +117,11 @@ function WorkbookToolbar({
   onSave: () => void
   onDownload: () => void
 }) {
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
+  const statusKey =
+    !dirty && reviewCommitted ? 'saved' : dirty ? 'dirty' : 'none'
+
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
       <FileSpreadsheet className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500" aria-hidden />
@@ -118,13 +131,25 @@ function WorkbookToolbar({
       >
         {downloadFileName}
       </span>
-      {!dirty && reviewCommitted ? (
-        <span className="shrink-0 text-[10px] text-muted-foreground">저장됨</span>
-      ) : dirty ? (
-        <span className="shrink-0 text-[10px] text-amber-600 dark:text-amber-500">
-          미저장
-        </span>
-      ) : null}
+      <AnimatePresence mode="wait" initial={false}>
+        {statusKey !== 'none' ? (
+          <m.span
+            key={statusKey}
+            className={cn(
+              'shrink-0 text-[10px]',
+              statusKey === 'saved' && 'text-muted-foreground',
+              statusKey === 'dirty' && 'text-amber-600 dark:text-amber-500',
+            )}
+            variants={scaleInTight}
+            initial={motionInitial(reduced)}
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            {statusKey === 'saved' ? '저장됨' : '미저장'}
+          </m.span>
+        ) : null}
+      </AnimatePresence>
       <Button
         type="button"
         variant="outline"

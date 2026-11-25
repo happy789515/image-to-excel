@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Images } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import { TableDetectionPreview } from '@/components/TableDetectionPreview'
 import { WorkshopSidebar } from '@/components/workshop/WorkshopSidebar'
@@ -21,9 +22,21 @@ import type { WorkshopStepId } from '@/lib/workflow/workshop-steps'
 import type { WorkflowPhaseId } from '@/lib/workflow/types'
 import {
   loadQueueWorkshopProgress,
+  patchActiveFileProgress,
   progressFromStepAccess,
   type FileWorkshopProgress,
 } from '@/lib/workshop-progress'
+import {
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import {
+  fadeUp,
+  springSnappy,
+  staggerContainerFast,
+  staggerItem,
+} from '@/lib/motion/variants'
 
 export function Workshop() {
   const {
@@ -44,6 +57,7 @@ export function Workshop() {
   const [progressByFileId, setProgressByFileId] = useState<
     Record<string, FileWorkshopProgress>
   >({})
+  const stepBridgeRef = useRef<WorkshopStepBridge | null>(null)
 
   const queueKey = useMemo(
     () => queue.map((item) => item.id).join('\0'),
@@ -52,24 +66,38 @@ export function Workshop() {
 
   useEffect(() => {
     const ids = queue.map((item) => item.id)
-    void loadQueueWorkshopProgress(ids).then(setProgressByFileId)
+    let cancelled = false
+    void loadQueueWorkshopProgress(ids).then((loaded) => {
+      if (cancelled) return
+      setProgressByFileId((prev) =>
+        patchActiveFileProgress(
+          { ...prev, ...loaded },
+          stepBridgeRef.current,
+        ),
+      )
+    })
+    return () => {
+      cancelled = true
+    }
   }, [queue, queueKey])
 
   const handleStepBridgeChange = useCallback(
     (bridge: WorkshopStepBridge | null) => {
+      stepBridgeRef.current = bridge
       setStepBridge(bridge)
-      if (activeId && bridge) {
+      if (bridge) {
         setProgressByFileId((prev) => ({
           ...prev,
-          [activeId]: progressFromStepAccess(
+          [bridge.fileId]: progressFromStepAccess(
             bridge.current,
             bridge.access,
             bridge.reviewCommitted,
+            bridge.exportReady,
           ),
         }))
       }
     },
-    [activeId],
+    [],
   )
 
   const handleSelectFile = useCallback(
@@ -130,8 +158,9 @@ export function Workshop() {
           />
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <WorkPanel
+            panelKey={activeItem?.id ?? 'empty'}
             activeItem={activeItem}
             onPhase={onPhase}
             onStepBridgeChange={handleStepBridgeChange}
@@ -180,54 +209,77 @@ export function Workshop() {
 }
 
 function WorkPanel({
+  panelKey,
   activeItem,
   onPhase,
   onStepBridgeChange,
 }: {
+  panelKey: string
   activeItem: ReturnType<typeof useUploadQueue>['activeItem']
   onPhase: (p: WorkflowPhaseId, detail?: string) => void
   onStepBridgeChange: (bridge: WorkshopStepBridge | null) => void
 }) {
-  if (!activeItem) {
-    return (
-      <div
-        className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center"
-        role="status"
-      >
-        <div
-          className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20"
-          aria-hidden
-        >
-          <Images className="size-8 text-primary" strokeWidth={1.75} />
-        </div>
-        <p className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-          이미지를 선택해 주세요
-        </p>
-        <p className="max-w-md text-sm text-muted-foreground sm:text-base">
-          왼쪽 목록에서 이미지를 고르면 표 검출 화면이 열립니다.
-        </p>
-      </div>
-    )
-  }
-
-  if (!isImageFile(activeItem.file)) {
-    return (
-      <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
-        PDF는 현재 브라우저 표 검출 미리보기를 지원하지 않습니다.
-      </p>
-    )
-  }
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
-      <TableDetectionPreview
-        key={activeItem.id}
-        fileId={activeItem.id}
-        imageUrl={activeItem.previewUrl}
-        file={activeItem.file}
-        onPhase={onPhase}
-        onStepBridgeChange={onStepBridgeChange}
-      />
-    </div>
+    <AnimatePresence mode="wait" initial={false}>
+      <m.div
+        key={panelKey}
+        className="flex min-h-0 flex-1 flex-col"
+        variants={fadeUp}
+        initial={motionInitial(reduced)}
+        animate="animate"
+        exit="exit"
+        transition={transition}
+      >
+        {!activeItem ? (
+          <m.div
+            className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center"
+            role="status"
+            variants={staggerContainerFast}
+            initial={motionInitial(reduced)}
+            animate="animate"
+          >
+            <m.div
+              variants={staggerItem}
+              transition={transition}
+              className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20"
+              aria-hidden
+            >
+              <Images className="size-8 text-primary" strokeWidth={1.75} />
+            </m.div>
+            <m.p
+              variants={staggerItem}
+              transition={transition}
+              className="text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+            >
+              이미지를 선택해 주세요
+            </m.p>
+            <m.p
+              variants={staggerItem}
+              transition={transition}
+              className="max-w-md text-sm text-muted-foreground sm:text-base"
+            >
+              왼쪽 목록에서 이미지를 고르면 표 검출 화면이 열립니다.
+            </m.p>
+          </m.div>
+        ) : !isImageFile(activeItem.file) ? (
+          <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+            PDF는 현재 브라우저 표 검출 미리보기를 지원하지 않습니다.
+          </p>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+            <TableDetectionPreview
+              fileId={activeItem.id}
+              imageUrl={activeItem.previewUrl}
+              file={activeItem.file}
+              onPhase={onPhase}
+              onStepBridgeChange={onStepBridgeChange}
+            />
+          </div>
+        )}
+      </m.div>
+    </AnimatePresence>
   )
 }

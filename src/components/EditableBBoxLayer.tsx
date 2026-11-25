@@ -8,7 +8,6 @@ import {
   type SetStateAction,
 } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-
 import { BboxRenameDialog } from '@/components/BboxRenameDialog'
 import {
   ContextMenu,
@@ -81,6 +80,7 @@ export function EditableBBoxLayer({
 }: Props) {
   const [layout, setLayout] = useState<ImageLayout | null>(null)
   const dragRef = useRef<DragState | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [renameId, setRenameId] = useState<string | null>(null)
 
   const renameBox = boxes.find((b) => b.id === renameId) ?? null
@@ -177,6 +177,7 @@ export function EditableBBoxLayer({
     }
     const onUp = () => {
       dragRef.current = null
+      setIsDragging(false)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -204,6 +205,7 @@ export function EditableBBoxLayer({
     if (!point) return
 
     onSelect(boxId)
+    setIsDragging(true)
     dragRef.current = {
       handle,
       boxId,
@@ -257,69 +259,76 @@ export function EditableBBoxLayer({
           const selected = item.id === selectedId
 
           return (
-            <ContextMenu
+            <div
               key={item.id}
-              onOpenChange={(open) => {
-                if (open) onSelect(item.id)
+              className="absolute"
+              style={{
+                left: `${left}%`,
+                top: `${top}%`,
+                width: `${width}%`,
+                height: `${height}%`,
               }}
             >
-              <ContextMenuTrigger
-                data-pan-zoom-block
-                className={cn(
-                  'absolute cursor-move border-2 bg-primary/15 transition-colors',
-                  selected
-                    ? 'border-primary ring-2 ring-primary/30'
-                    : 'border-primary/80 hover:border-primary hover:bg-primary/25',
-                )}
-                style={{
-                  left: `${left}%`,
-                  top: `${top}%`,
-                  width: `${width}%`,
-                  height: `${height}%`,
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  startDrag(e, item.id, 'move', item.box)
+              <ContextMenu
+                onOpenChange={(open) => {
+                  if (open) onSelect(item.id)
                 }}
               >
-                <span className="pointer-events-none absolute left-0 top-0 max-w-full truncate rounded-br bg-primary px-1 py-0.5 text-[10px] font-medium leading-none text-primary-foreground">
-                  #{index + 1}{' '}
-                  <span className="font-normal opacity-90">{item.title}</span>
-                </span>
-                {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-                  <button
-                    key={corner}
-                    type="button"
-                    aria-label={`영역 ${index + 1} ${corner} 모서리 조절`}
-                    className={cn(
-                      'absolute z-10 size-3 rounded-sm border border-primary-foreground bg-primary shadow-sm',
-                      'transition-[transform,box-shadow,background-color,border-color]',
-                      'hover:scale-125 hover:border-primary hover:bg-primary-foreground hover:shadow-md',
-                      'active:scale-110',
-                      HANDLE_CURSOR[corner],
-                      corner === 'nw' && '-left-1.5 -top-1.5',
-                      corner === 'ne' && '-right-1.5 -top-1.5',
-                      corner === 'sw' && '-bottom-1.5 -left-1.5',
-                      corner === 'se' && '-bottom-1.5 -right-1.5',
-                    )}
-                    onPointerDown={(e) => startDrag(e, item.id, corner, item.box)}
-                  />
-                ))}
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => setRenameId(item.id)}>
-                  <Pencil aria-hidden />
-                  시트 이름 변경
-                </ContextMenuItem>
-                <ContextMenuItem
-                  variant="destructive"
-                  onClick={() => removeBox(item.id)}
+                <ContextMenuTrigger
+                  data-pan-zoom-block
+                  className={cn(
+                    'absolute inset-0 cursor-move border-2 bg-primary/15 transition-[box-shadow,border-color,background-color]',
+                    selected
+                      ? 'border-primary ring-2 ring-primary/30 shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary),transparent_55%)]'
+                      : 'border-primary/80 hover:border-primary hover:bg-primary/25',
+                    isDragging && 'transition-none shadow-none',
+                  )}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                    startDrag(e, item.id, 'move', item.box)
+                  }}
                 >
-                  <Trash2 aria-hidden />
-                  영역 삭제
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+                  <span className="pointer-events-none absolute left-0 top-0 max-w-full truncate rounded-br bg-primary px-1 py-0.5 text-[10px] font-medium leading-none text-primary-foreground">
+                    #{index + 1}{' '}
+                    <span className="font-normal opacity-90">{item.title}</span>
+                  </span>
+                  {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+                    <button
+                      key={corner}
+                      type="button"
+                      aria-label={`영역 ${index + 1} ${corner} 모서리 조절`}
+                      className={cn(
+                        'absolute z-10 size-3 rounded-sm border border-primary-foreground bg-primary shadow-sm',
+                        'transition-[transform,box-shadow,background-color,border-color]',
+                        'hover:scale-125 hover:border-primary hover:bg-primary-foreground hover:shadow-md',
+                        'active:scale-110',
+                        HANDLE_CURSOR[corner],
+                        corner === 'nw' && '-left-1.5 -top-1.5',
+                        corner === 'ne' && '-right-1.5 -top-1.5',
+                        corner === 'sw' && '-bottom-1.5 -left-1.5',
+                        corner === 'se' && '-bottom-1.5 -right-1.5',
+                      )}
+                      onPointerDown={(e) =>
+                        startDrag(e, item.id, corner, item.box)
+                      }
+                    />
+                  ))}
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={() => setRenameId(item.id)}>
+                    <Pencil aria-hidden />
+                    시트 이름 변경
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    variant="destructive"
+                    onClick={() => removeBox(item.id)}
+                  >
+                    <Trash2 aria-hidden />
+                    영역 삭제
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            </div>
           )
         })}
       </div>

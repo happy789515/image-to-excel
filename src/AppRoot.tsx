@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import App from '@/App.tsx'
 import { BootScreen } from '@/components/BootScreen'
 import { LoginScreen } from '@/components/LoginScreen'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { checkAuth, logoutApi } from '@/lib/api/auth'
+import {
+  motionInitial,
+  motionTransition,
+  useReducedMotion,
+} from '@/lib/motion/use-reduced-motion'
+import { fadeUp, springSnappy } from '@/lib/motion/variants'
 import {
   bootstrapTableDetection,
   type BootPhase,
@@ -18,7 +25,19 @@ const INITIAL_PHASE: BootPhase = {
 
 type AuthPhase = 'checking' | 'guest' | 'user'
 
+type ShellId = 'checking' | 'guest' | 'boot' | 'workshop'
+
+function shellId(authPhase: AuthPhase, ready: boolean): ShellId {
+  if (authPhase === 'checking') return 'checking'
+  if (authPhase === 'guest') return 'guest'
+  if (!ready) return 'boot'
+  return 'workshop'
+}
+
 export function AppRoot() {
+  const reduced = useReducedMotion()
+  const transition = motionTransition(reduced, springSnappy)
+
   const [authPhase, setAuthPhase] = useState<AuthPhase>('checking')
   const [authBackendMessage, setAuthBackendMessage] = useState<string | null>(
     null,
@@ -27,6 +46,11 @@ export function AppRoot() {
   const [phase, setPhase] = useState<BootPhase>(INITIAL_PHASE)
   const [ready, setReady] = useState(false)
   const [bootKey, setBootKey] = useState(0)
+
+  const screenKey = useMemo(
+    () => shellId(authPhase, ready),
+    [authPhase, ready],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -91,37 +115,74 @@ export function AppRoot() {
       .catch((err) => console.error(err))
   }, [])
 
-  if (authPhase === 'checking') {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
-        <ThemeToggle className="fixed top-4 right-4 z-50 sm:top-5 sm:right-6" />
-        <Loader2 className="size-8 animate-spin text-muted-foreground" aria-label="로그인 확인 중" />
-      </div>
-    )
-  }
-
-  if (authPhase === 'guest') {
-    return (
-      <LoginScreen
-        onLoggedIn={handleLoggedIn}
-        backendMessage={authBackendMessage}
-      />
-    )
-  }
-
   return (
-    <>
-      {!ready ? (
-        <>
+    <AnimatePresence mode="wait">
+      {screenKey === 'checking' ? (
+        <m.div
+          key="checking"
+          className="flex min-h-svh items-center justify-center bg-background"
+          variants={fadeUp}
+          initial={motionInitial(reduced)}
+          animate="animate"
+          exit="exit"
+          transition={transition}
+        >
+          <ThemeToggle className="fixed top-4 right-4 z-50 sm:top-5 sm:right-6" />
+          <Loader2
+            className="size-8 animate-spin text-muted-foreground"
+            aria-label="로그인 확인 중"
+          />
+        </m.div>
+      ) : null}
+
+      {screenKey === 'guest' ? (
+        <m.div
+          key="guest"
+          className="min-h-svh"
+          variants={fadeUp}
+          initial={motionInitial(reduced)}
+          animate="animate"
+          exit="exit"
+          transition={transition}
+        >
+          <LoginScreen
+            onLoggedIn={handleLoggedIn}
+            backendMessage={authBackendMessage}
+          />
+        </m.div>
+      ) : null}
+
+      {screenKey === 'boot' ? (
+        <m.div
+          key="boot"
+          className="min-h-svh bg-background"
+          variants={fadeUp}
+          initial={motionInitial(reduced)}
+          animate="animate"
+          exit="exit"
+          transition={transition}
+        >
           <ThemeToggle className="fixed top-4 right-4 z-50 sm:top-5 sm:right-6" />
           <BootScreen
             phase={phase}
             onRetry={phase.id === 'error' ? handleRetry : undefined}
           />
-        </>
-      ) : (
-        <App username={username ?? ''} onLogout={() => void handleLogout()} />
-      )}
-    </>
+        </m.div>
+      ) : null}
+
+      {screenKey === 'workshop' ? (
+        <m.div
+          key="workshop"
+          className="h-svh overflow-hidden"
+          variants={fadeUp}
+          initial={motionInitial(reduced)}
+          animate="animate"
+          exit="exit"
+          transition={transition}
+        >
+          <App username={username ?? ''} onLogout={() => void handleLogout()} />
+        </m.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

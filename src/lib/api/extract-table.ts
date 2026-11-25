@@ -1,3 +1,8 @@
+import {
+  extractTableErrorMessage,
+  extractTableNetworkErrorMessage,
+} from '@/lib/api/extract-table-errors'
+
 export type GeminiTableRow = { cells: string[] }
 
 export type GeminiTableSheet = {
@@ -22,20 +27,34 @@ export async function extractTableViaApi(
   sheetName: string,
   signal?: AbortSignal,
 ): Promise<GeminiTableSheet> {
-  const res = await fetch('/api/extract-table', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({ imageBase64, mimeType, sheetName }),
-  })
+  let res: Response
+  try {
+    res = await fetch('/api/extract-table', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({ imageBase64, mimeType, sheetName }),
+    })
+  } catch (cause) {
+    throw new Error(extractTableNetworkErrorMessage(cause), { cause })
+  }
 
-  const body = (await res.json()) as GeminiTableSheet & ApiErrorBody
+  let body: GeminiTableSheet & ApiErrorBody
+  try {
+    body = (await res.json()) as GeminiTableSheet & ApiErrorBody
+  } catch {
+    if (!res.ok) {
+      throw new Error(extractTableErrorMessage(res.status))
+    }
+    throw new Error('서버 응답 형식이 올바르지 않습니다.')
+  }
+
   if (!res.ok) {
-    throw new Error(body.error ?? `API error (${res.status})`)
+    throw new Error(extractTableErrorMessage(res.status, body.error))
   }
   if (!body.name || !Array.isArray(body.rows)) {
-    throw new Error('Invalid table response from API')
+    throw new Error('표 데이터 형식이 올바르지 않습니다. 다시 변환해 주세요.')
   }
   return { name: body.name, rows: body.rows }
 }

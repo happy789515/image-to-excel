@@ -1,5 +1,9 @@
 import { loadDetectionResult } from '@/lib/detection-persist'
-import type { WorkshopStepId } from '@/lib/workflow/workshop-steps'
+import type { WorkshopStepBridge } from '@/lib/workflow/workshop-step-bridge'
+import {
+  type WorkshopStepId,
+  workshopStepIndex,
+} from '@/lib/workflow/workshop-steps'
 import { exportSessionMatches } from '@/lib/workshop-export-signature'
 import { loadWorkshopSession } from '@/lib/workshop-persist'
 import type { StoredDetection } from '@/lib/detection-persist'
@@ -25,7 +29,8 @@ export function deriveFileWorkshopProgress(
   const convertDone = exportOk
   const reviewDone = exportOk && Boolean(session?.reviewCommitted)
   const step: WorkshopStepId =
-    session?.workshopStep ?? (detectDone ? 'detect' : 'detect')
+    session?.workshopStep ??
+    (reviewDone ? 'review' : convertDone ? 'convert' : 'detect')
 
   return { step, detectDone, convertDone, reviewDone }
 }
@@ -69,11 +74,30 @@ export function progressFromStepAccess(
   step: WorkshopStepId,
   access: { convert: boolean; review: boolean },
   reviewCommitted: boolean,
+  exportReady = false,
 ): FileWorkshopProgress {
+  const idx = workshopStepIndex(step)
   return {
     step,
-    detectDone: access.convert || step !== 'detect',
-    convertDone: access.review,
-    reviewDone: reviewCommitted && access.review,
+    detectDone: idx > 0 || access.convert,
+    convertDone: idx > 1 || access.review || (idx === 1 && exportReady),
+    reviewDone:
+      step === 'review' && reviewCommitted,
+  }
+}
+
+export function patchActiveFileProgress(
+  loaded: Record<string, FileWorkshopProgress>,
+  bridge: WorkshopStepBridge | null,
+): Record<string, FileWorkshopProgress> {
+  if (!bridge) return loaded
+  return {
+    ...loaded,
+    [bridge.fileId]: progressFromStepAccess(
+      bridge.current,
+      bridge.access,
+      bridge.reviewCommitted,
+      bridge.exportReady,
+    ),
   }
 }
