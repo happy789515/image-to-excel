@@ -8,6 +8,7 @@ import {
 } from '@/lib/upload-idb'
 
 import { pruneDetectionResults } from '@/lib/detection-persist'
+import { clearWorkshopSessions, pruneWorkshopSessions } from '@/lib/workshop-persist'
 
 type FileRow = {
   id: string
@@ -96,7 +97,9 @@ export async function persistUploadQueue(
     )
   })
 
-  await pruneDetectionResults(items.map((item) => item.id))
+  const keepIds = items.map((item) => item.id)
+  await pruneDetectionResults(keepIds)
+  await pruneWorkshopSessions(keepIds)
 }
 
 export async function clearPersistedUploads(): Promise<void> {
@@ -105,6 +108,7 @@ export async function clearPersistedUploads(): Promise<void> {
     await promisifyRequest(tx.objectStore(STORE_META).clear())
   })
   await idbClearDetection()
+  await clearWorkshopSessions()
 }
 
 export function persistErrorMessage(err: unknown): string {

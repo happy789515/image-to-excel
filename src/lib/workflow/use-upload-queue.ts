@@ -7,6 +7,8 @@ import {
   UPLOAD_ACCEPT,
 } from '@/lib/image-upload'
 import { deleteDetectionResult } from '@/lib/detection-persist'
+import { clearWorkshopHydration } from '@/lib/workshop-hydration-cache'
+import { deleteWorkshopSession } from '@/lib/workshop-persist'
 import {
   clearPersistedUploads,
   loadPersistedUploads,
@@ -159,6 +161,8 @@ export function useUploadQueue() {
     setActiveId((prev) => (prev === id ? null : prev))
     setError(null)
     void deleteDetectionResult(id).catch((err) => console.error(err))
+    void deleteWorkshopSession(id).catch((err) => console.error(err))
+    clearWorkshopHydration(id)
   }, [])
 
   const clearAll = useCallback(() => {

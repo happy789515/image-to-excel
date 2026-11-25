@@ -1,12 +1,24 @@
 import type { EditableBox } from '@/components/EditableBBoxLayer'
+import type { ExportSheet } from '@/lib/excel/build-xlsx'
 
 const DB_NAME = 'image-to-excel-local'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 export const STORE_FILES = 'files'
 export const STORE_META = 'meta'
 export const STORE_DETECTION = 'detection'
+export const STORE_WORKSHOP = 'workshop'
 export const META_ID = 'queue'
+
+export type WorkshopSessionRow = {
+  fileId: string
+  workshopStep: 'detect' | 'convert' | 'review'
+  exportSheets: ExportSheet[] | null
+  downloadFileName: string
+  exportSignature: string | null
+  reviewCommitted: boolean
+  updatedAt: number
+}
 
 export type DetectionRow = {
   fileId: string
@@ -36,6 +48,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_DETECTION)) {
         db.createObjectStore(STORE_DETECTION, { keyPath: 'fileId' })
+      }
+      if (!db.objectStoreNames.contains(STORE_WORKSHOP)) {
+        db.createObjectStore(STORE_WORKSHOP, { keyPath: 'fileId' })
       }
     }
   })
@@ -99,6 +114,72 @@ export async function idbClearDetection(): Promise<void> {
   try {
     const tx = db.transaction(STORE_DETECTION, 'readwrite')
     await promisifyRequest(tx.objectStore(STORE_DETECTION).clear())
+    await waitTransaction(tx)
+  } finally {
+    db.close()
+  }
+}
+
+export async function idbGetWorkshop(
+  fileId: string,
+): Promise<WorkshopSessionRow | null> {
+  const db = await openDatabase()
+  try {
+    const tx = db.transaction(STORE_WORKSHOP, 'readonly')
+    const row = (await promisifyRequest(
+      tx.objectStore(STORE_WORKSHOP).get(fileId),
+    )) as WorkshopSessionRow | undefined
+    await waitTransaction(tx)
+    return row ?? null
+  } finally {
+    db.close()
+  }
+}
+
+export async function idbPutWorkshop(row: WorkshopSessionRow): Promise<void> {
+  const db = await openDatabase()
+  try {
+    const tx = db.transaction(STORE_WORKSHOP, 'readwrite')
+    await promisifyRequest(tx.objectStore(STORE_WORKSHOP).put(row))
+    await waitTransaction(tx)
+  } finally {
+    db.close()
+  }
+}
+
+export async function idbRemoveWorkshop(fileId: string): Promise<void> {
+  const db = await openDatabase()
+  try {
+    const tx = db.transaction(STORE_WORKSHOP, 'readwrite')
+    await promisifyRequest(tx.objectStore(STORE_WORKSHOP).delete(fileId))
+    await waitTransaction(tx)
+  } finally {
+    db.close()
+  }
+}
+
+export async function idbClearWorkshop(): Promise<void> {
+  const db = await openDatabase()
+  try {
+    const tx = db.transaction(STORE_WORKSHOP, 'readwrite')
+    await promisifyRequest(tx.objectStore(STORE_WORKSHOP).clear())
+    await waitTransaction(tx)
+  } finally {
+    db.close()
+  }
+}
+
+export async function deleteWorkshopRowsExcept(keep: Set<string>): Promise<void> {
+  const db = await openDatabase()
+  try {
+    const tx = db.transaction(STORE_WORKSHOP, 'readwrite')
+    const store = tx.objectStore(STORE_WORKSHOP)
+    const all = (await promisifyRequest(store.getAllKeys())) as string[]
+    for (const key of all) {
+      if (!keep.has(key)) {
+        await promisifyRequest(store.delete(key))
+      }
+    }
     await waitTransaction(tx)
   } finally {
     db.close()
