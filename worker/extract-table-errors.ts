@@ -38,3 +38,11 @@ export function workerExtractTableErrorMessage(status: number): string {
       return `요청을 처리할 수 없습니다. (${status})`
   }
 }
+
+export function workerGeminiRequestTooLargeMessage(): string {
+  return '요청 크기가 제한(20MB)을 초과했습니다. 크롭 해상도를 낮추거나 이미지 수를 줄여 주세요.'
+}
+
+export function workerUploadTooLargeMessage(): string {
+  return '파일 크기가 15MB 제한을 초과합니다.'
+}
