@@ -3,6 +3,9 @@
   "name": "image-to-excel",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-25",
+  "placement": {
+    "region": "gcp:asia-northeast3",
+  },
   "durable_objects": {
     "bindings": [
       {
