@@ -3,7 +3,6 @@ import { useDropzone, type Accept, type FileRejection } from 'react-dropzone'
 import {
   AlertCircle,
   FileImage,
-  FileText,
   Trash2,
   Upload,
   X,
@@ -20,15 +19,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { FileQueueStepProgress } from '@/components/workshop/FileQueueStepProgress'
+import type { ProjectImageItem } from '@/hooks/use-project-images'
 import {
   formatFileSize,
-  isImageFile,
   MAX_IMAGE_FILES,
-  UPLOAD_ACCEPT_LABEL,
+  PROJECT_UPLOAD_ACCEPT_LABEL,
 } from '@/lib/image-upload'
-import { FileQueueStepProgress } from '@/components/workshop/FileQueueStepProgress'
-import type { FileWorkshopProgress } from '@/lib/workshop-progress'
-import type { QueuedImage } from '@/lib/workflow/use-upload-queue'
+import { MAX_PROJECT_IMAGES } from '@/lib/project/constants'
+import type { ProjectDetail } from '@/lib/api/projects'
+import { tableCountForImage } from '@/lib/project/selectors'
 import {
   listItemTransition,
   motionInitial,
@@ -38,34 +38,34 @@ import { fadeSlideFromLeft } from '@/lib/motion/variants'
 import { cn } from 'cn'
 
 type Props = {
-  queue: QueuedImage[]
+  detail: ProjectDetail
+  queue: ProjectImageItem[]
   activeId: string | null
-  progressByFileId: Record<string, FileWorkshopProgress>
   onSelect: (id: string) => void
   onRemove: (id: string) => void
   onAppend: (accepted: File[], rejected: FileRejection[]) => void
-  onClearAll: () => void
   accept: Accept
   error: string | null
+  uploading: boolean
 }
 
 export function WorkshopSidebar({
+  detail,
   queue,
   activeId,
-  progressByFileId,
   onSelect,
   onRemove,
   onAppend,
-  onClearAll,
   accept,
   error,
+  uploading,
 }: Props) {
   const reduced = useReducedMotion()
   const itemTransition = listItemTransition(reduced)
 
   const onDrop = useCallback(
     (accepted: File[], rejected: FileRejection[]) => {
-      onAppend(accepted, rejected)
+      void onAppend(accepted, rejected)
     },
     [onAppend],
   )
@@ -74,25 +74,19 @@ export function WorkshopSidebar({
     useDropzone({
       onDrop,
       accept,
-      maxFiles: MAX_IMAGE_FILES,
+      maxFiles: MAX_PROJECT_IMAGES,
       noClick: true,
       noKeyboard: false,
     })
 
-  const totalSize = queue.reduce((sum, item) => sum + item.file.size, 0)
-  const [clearAllOpen, setClearAllOpen] = useState(false)
-
-  const confirmClearAll = () => {
-    onClearAll()
-    setClearAllOpen(false)
-  }
+  const totalSize = queue.reduce((sum, item) => sum + item.size, 0)
 
   return (
     <aside className="flex h-full w-72 max-w-[min(100%,20rem)] shrink-0 min-w-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="border-b border-sidebar-border px-3 py-3">
         <p className="text-sm font-semibold text-foreground">이미지</p>
         <p className="text-xs text-muted-foreground">
-          파일마다 독립 워크플로 · 최대 {MAX_IMAGE_FILES}개
+          프로젝트당 최대 {MAX_IMAGE_FILES}장
         </p>
       </div>
 
@@ -115,26 +109,34 @@ export function WorkshopSidebar({
               isDragReject && 'border-destructive bg-destructive/5',
             )}
           >
-          <input {...getInputProps()} aria-label="이미지 파일 선택" />
-          <div className="flex size-10 items-center justify-center rounded-full bg-background ring-1 ring-border">
-            {isDragReject ? (
-              <AlertCircle className="size-5 text-destructive" aria-hidden />
-            ) : isDragActive ? (
-              <FileImage className="size-5 text-primary" aria-hidden />
-            ) : (
-              <Upload className="size-5 text-muted-foreground" aria-hidden />
-            )}
-          </div>
-          <p className="text-xs font-medium text-foreground">
-            {isDragReject
-              ? '지원하지 않는 형식'
-              : isDragActive
-                ? '여기에 놓기'
-                : '드래그 · Ctrl+V'}
-          </p>
-          <Button type="button" variant="secondary" size="sm" onClick={open}>
-            파일 업로드
-          </Button>
+            <input {...getInputProps()} aria-label="이미지 파일 선택" />
+            <div className="flex size-10 items-center justify-center rounded-full bg-background ring-1 ring-border">
+              {isDragReject ? (
+                <AlertCircle className="size-5 text-destructive" aria-hidden />
+              ) : isDragActive ? (
+                <FileImage className="size-5 text-primary" aria-hidden />
+              ) : (
+                <Upload className="size-5 text-muted-foreground" aria-hidden />
+              )}
+            </div>
+            <p className="text-xs font-medium text-foreground">
+              {uploading
+                ? '업로드 중…'
+                : isDragReject
+                  ? '지원하지 않는 형식'
+                  : isDragActive
+                    ? '여기에 놓기'
+                    : '드래그 · Ctrl+V'}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={uploading}
+              onClick={open}
+            >
+              파일 업로드
+            </Button>
           </div>
         </m.div>
 
@@ -147,49 +149,9 @@ export function WorkshopSidebar({
 
         {queue.length > 0 ? (
           <>
-            <div className="flex shrink-0 items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {queue.length}개 · {formatFileSize(totalSize)}
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                className="h-7 gap-1 text-xs"
-                onClick={() => setClearAllOpen(true)}
-              >
-                <Trash2 className="size-3.5" aria-hidden />
-                전체 삭제
-              </Button>
-            </div>
-            <Dialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
-              <DialogContent className="sm:max-w-sm" showCloseButton>
-                <DialogHeader>
-                  <DialogTitle>전체 이미지를 삭제할까요?</DialogTitle>
-                  <DialogDescription>
-                    목록의 {queue.length}개 파일과 각 파일의 검출·변환 기록이
-                    모두 지워집니다. 되돌릴 수 없습니다.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setClearAllOpen(false)}
-                  >
-                    취소
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={confirmClearAll}
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                    삭제
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {queue.length}개 · {formatFileSize(totalSize)}
+            </p>
             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
               <AnimatePresence initial={false}>
                 {queue.map((item) => (
@@ -197,11 +159,15 @@ export function WorkshopSidebar({
                     key={item.id}
                     item={item}
                     active={activeId === item.id}
-                    progress={progressByFileId[item.id]}
+                    detected={
+                      detail.images.find((img) => img.id === item.id)
+                        ?.detection != null
+                    }
+                    tableCount={tableCountForImage(detail, item.id)}
                     reduced={reduced}
                     transition={itemTransition}
                     onSelect={() => onSelect(item.id)}
-                    onRemove={() => onRemove(item.id)}
+                    onRemove={() => void onRemove(item.id)}
                   />
                 ))}
               </AnimatePresence>
@@ -209,7 +175,7 @@ export function WorkshopSidebar({
           </>
         ) : (
           <p className="text-center text-xs text-muted-foreground">
-            {UPLOAD_ACCEPT_LABEL} · 이 기기에만 저장
+            {PROJECT_UPLOAD_ACCEPT_LABEL} · 서버에 저장
           </p>
         )}
       </div>
@@ -220,20 +186,24 @@ export function WorkshopSidebar({
 function QueueRow({
   item,
   active,
-  progress,
+  detected,
+  tableCount,
   reduced,
   transition,
   onSelect,
   onRemove,
 }: {
-  item: QueuedImage
+  item: ProjectImageItem
   active: boolean
-  progress: FileWorkshopProgress | undefined
+  detected: boolean
+  tableCount: number
   reduced: boolean
   transition: ReturnType<typeof listItemTransition>
   onSelect: () => void
   onRemove: () => void
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
   return (
     <m.li
       layout={!reduced}
@@ -249,30 +219,33 @@ function QueueRow({
           active && 'border-primary/30 bg-primary/10 ring-1 ring-inset ring-primary/25',
         )}
       >
-        {active && !reduced ? (
-          <m.span
-            layoutId="sidebar-active-accent"
-            className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-primary"
-            transition={transition}
-            aria-hidden
-          />
-        ) : null}
         <button
           type="button"
           onClick={onSelect}
           className="relative flex min-w-0 flex-1 items-center gap-2 rounded-md pl-1 text-left transition-colors hover:bg-background"
         >
-          <ThumbPreview file={item.file} previewUrl={item.previewUrl} />
+          <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+            <img
+              src={item.previewUrl}
+              alt=""
+              className="size-full object-cover"
+            />
+          </div>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium">
-              {item.file.name}
+            <span
+              className="block truncate text-xs font-medium"
+              title={item.name}
+            >
+              {item.name}
             </span>
             <span className="text-[10px] text-muted-foreground">
-              {formatFileSize(item.file.size)}
+              {formatFileSize(item.size)}
             </span>
-            {isImageFile(item.file) ? (
-              <FileQueueStepProgress progress={progress} className="mt-1" />
-            ) : null}
+            <FileQueueStepProgress
+              detected={detected}
+              tableCount={tableCount}
+              className="mt-1"
+            />
           </span>
         </button>
         <Button
@@ -280,32 +253,39 @@ function QueueRow({
           variant="ghost"
           size="icon-sm"
           className="shrink-0"
-          aria-label={`${item.file.name} 제거`}
-          onClick={onRemove}
+          aria-label={`${item.name} 제거`}
+          onClick={() => setConfirmOpen(true)}
         >
           <X />
         </Button>
       </div>
-    </m.li>
-  )
-}
 
-function ThumbPreview({
-  file,
-  previewUrl,
-}: {
-  file: File
-  previewUrl: string
-}) {
-  return (
-    <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
-      {isImageFile(file) ? (
-        <img src={previewUrl} alt="" className="size-full object-cover" />
-      ) : (
-        <div className="flex size-full flex-col items-center justify-center text-muted-foreground">
-          <FileText className="size-4" aria-hidden />
-        </div>
-      )}
-    </div>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>이미지 삭제</DialogTitle>
+            <DialogDescription>
+              「{item.name}」과 검출된 표가 삭제됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
+              취소
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setConfirmOpen(false)
+                onRemove()
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              삭제
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </m.li>
   )
 }

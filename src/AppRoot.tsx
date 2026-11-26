@@ -7,6 +7,7 @@ import { BootScreen } from '@/components/BootScreen'
 import { LoginScreen } from '@/components/LoginScreen'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { checkAuth, logoutApi } from '@/lib/api/auth'
+import { AUTH_EXPIRED_EVENT } from '@/lib/api/projects'
 import {
   motionInitial,
   motionTransition,
@@ -53,6 +54,13 @@ export function AppRoot() {
   )
 
   useEffect(() => {
+    const req = indexedDB.deleteDatabase('image-to-excel-local')
+    req.onerror = () => console.error(req.error ?? 'IndexedDB delete failed')
+    req.onblocked = () =>
+      console.error('IndexedDB delete blocked (close other tabs)')
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     void checkAuth()
       .then((result) => {
@@ -89,6 +97,17 @@ export function AppRoot() {
     if (authPhase !== 'user') return
     runBootstrap()
   }, [authPhase, runBootstrap, bootKey])
+
+  useEffect(() => {
+    const onExpired = () => {
+      setUsername(null)
+      setAuthPhase('guest')
+      setReady(false)
+      setPhase(INITIAL_PHASE)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+  }, [])
 
   const handleRetry = useCallback(() => {
     setReady(false)
