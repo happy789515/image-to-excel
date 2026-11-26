@@ -353,13 +353,30 @@ async function handleUploadImage(
   })
 
   try {
-    await env.DB.prepare(
+    const inserted = await env.DB.prepare(
       `INSERT INTO images (id, project_id, r2_key, name, mime, size, position,
        detection_threshold, empty_hint, selected_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
+       SELECT ?, ?, ?, ?, ?, ?,
+         COALESCE((SELECT MAX(position) FROM images WHERE project_id = ?), -1) + 1,
+         NULL, NULL, NULL
+       WHERE (SELECT COUNT(*) FROM images WHERE project_id = ?) < ?`,
     )
-      .bind(imageId, projectId, r2Key, name, mime, body.byteLength, position)
+      .bind(
+        imageId,
+        projectId,
+        r2Key,
+        name,
+        mime,
+        body.byteLength,
+        projectId,
+        projectId,
+        MAX_PROJECT_IMAGES,
+      )
       .run()
+    if ((inserted.meta.changes ?? 0) === 0) {
+      await env.IMAGES.delete(r2Key)
+      return jsonError(409, '프로젝트당 이미지는 최대 30장까지 업로드할 수 있습니다.')
+    }
     await touchProject(env.DB, projectId, owner)
   } catch (err) {
     console.error('image insert failed', err)
@@ -485,6 +502,18 @@ async function handlePutDetection(
     return jsonError(400, '표 좌표 형식이 올바르지 않습니다.')
   }
   const validBoxes = boxes as NonNullable<(typeof boxes)[number]>[]
+  if (new Set(validBoxes.map((b) => b.id)).size !== validBoxes.length) {
+    return jsonError(400, '표 id가 중복되었습니다.')
+  }
+
+  const idsTaken = await env.DB.prepare(
+    `SELECT id FROM tables WHERE project_id <> ? AND id IN (${validBoxes.map(() => '?').join(',')})`,
+  )
+    .bind(projectId, ...validBoxes.map((b) => b.id))
+    .all<{ id: string }>()
+  if ((idsTaken.results ?? []).length > 0) {
+    return jsonError(400, '표 id가 다른 프로젝트와 중복되었습니다. 다시 검출해 주세요.')
+  }
 
   let selectedId: string | null = null
   if (body.selectedId != null) {
@@ -675,6 +704,9 @@ async function handleGroup(
   const { tables, images, imagePositions } = loaded
   const ordered = orderedProjectTables(tables, imagePositions)
   const allIds = ordered.map((t) => t.id)
+  if (allIds.length === 0) {
+    return jsonError(400, '그룹핑할 표가 없습니다. 먼저 표를 검출해 주세요.')
+  }
   if (!cropSetEquals(crops, allIds)) {
     return jsonError(400, '프로젝트의 모든 표에 대한 크롭이 필요합니다.')
   }
@@ -941,6 +973,9 @@ async function handleExtractSheet(
   const ordered = orderedProjectTables(members, loaded.imagePositions)
   const orderedIds = ordered.map((t) => t.id)
 
+  if (orderedIds.length === 0) {
+    return jsonError(400, '이 시트에 추출할 표가 없습니다.')
+  }
   if (!cropSetEquals(crops, orderedIds)) {
     return jsonError(400, '이 시트의 모든 표에 대한 크롭이 필요합니다.')
   }
