@@ -102,7 +102,7 @@ npm install
 cp .dev.vars.example .dev.vars
 # .dev.vars 에 GEMINI_API_KEY, SESSION_SECRET, AUTH_USERS 설정
 
-# 터미널 1 — API (8787)
+# 터미널 1 — API (8787, 로컬 D1 마이그레이션 자동 적용)
 npm run dev:worker
 
 # 터미널 2 — 프론트 (Vite, /api → worker 프록시)
