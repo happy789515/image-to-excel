@@ -42,7 +42,10 @@ export function loadTableDetector(): Promise<ObjectDetectionPipeline> {
         model,
         processor,
       })
-    })()
+    })().catch((err: unknown) => {
+      detectorPromise = null
+      throw err
+    })
   }
   return detectorPromise
 }

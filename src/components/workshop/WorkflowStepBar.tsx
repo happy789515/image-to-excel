@@ -1,6 +1,7 @@
 import {
   Check,
   Download,
+  Layers,
   Loader2,
   Scan,
   Table2,
@@ -27,6 +28,7 @@ export type StepAccess = Record<WorkshopStepId, boolean>
 
 const STEP_ICON: Record<WorkshopStepId, LucideIcon> = {
   detect: Scan,
+  group: Layers,
   convert: Table2,
   review: Download,
 }
