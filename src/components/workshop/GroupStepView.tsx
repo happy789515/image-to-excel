@@ -51,6 +51,8 @@ export function GroupStepView({ fetchImageBlob }: Props) {
   const [moveTableId, setMoveTableId] = useState<string | null>(null)
   const [renamingSheetId, setRenamingSheetId] = useState<string | null>(null)
   const [renameSheetName, setRenameSheetName] = useState('')
+  const [draggingTableId, setDraggingTableId] = useState<string | null>(null)
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null)
 
   const names = useMemo(() => imageNameById(detail), [detail])
   const sheets = useMemo(() => sheetsSorted(detail), [detail])
@@ -109,6 +111,35 @@ export function GroupStepView({ fetchImageBlob }: Props) {
       if (err instanceof Error) setError(err.message)
     }
   }
+
+  const endDrag = () => {
+    setDraggingTableId(null)
+    setDragOverTarget(null)
+  }
+
+  const draggingTable = draggingTableId
+    ? detail.tables.find((t) => t.id === draggingTableId)
+    : undefined
+
+  const dropTargetProps = (target: string, onDropTable: (tableId: string) => void) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!draggingTable || draggingTable.sheetId === target) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverTarget(target)
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+        setDragOverTarget((cur) => (cur === target ? null : cur))
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      const table = draggingTable
+      endDrag()
+      if (table && table.sheetId !== target) onDropTable(table.id)
+    },
+  })
 
   const confirmNewSheet = async () => {
     const name = newSheetName.trim()
@@ -185,6 +216,9 @@ export function GroupStepView({ fetchImageBlob }: Props) {
                   setNewSheetOpen(true)
                 }}
                 otherSheets={sheets}
+                dragging={draggingTableId === table.id}
+                onDragStart={() => setDraggingTableId(table.id)}
+                onDragEnd={endDrag}
               />
             ))}
           </div>
@@ -196,7 +230,16 @@ export function GroupStepView({ fetchImageBlob }: Props) {
           const members = tablesInSheet(detail, sheet.id)
           const manual = members.some((t) => t.sheetManual)
           return (
-            <Card key={sheet.id}>
+            <Card
+              key={sheet.id}
+              {...dropTargetProps(sheet.id, (tableId) =>
+                void handleMove(tableId, { sheetId: sheet.id }),
+              )}
+              className={cn(
+                'transition-[transform,box-shadow] duration-200 ease-out motion-reduce:transition-none',
+                dragOverTarget === sheet.id && 'scale-[1.01] shadow-md ring-2 ring-primary',
+              )}
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="truncate text-base">{sheet.name}</CardTitle>
                 <div className="flex shrink-0 items-center gap-1">
@@ -236,6 +279,9 @@ export function GroupStepView({ fetchImageBlob }: Props) {
                         setNewSheetOpen(true)
                       }}
                       otherSheets={sheets.filter((s) => s.id !== sheet.id)}
+                      dragging={draggingTableId === table.id}
+                      onDragStart={() => setDraggingTableId(table.id)}
+                      onDragEnd={endDrag}
                     />
                   ))
                 )}
@@ -243,6 +289,21 @@ export function GroupStepView({ fetchImageBlob }: Props) {
             </Card>
           )
         })}
+        {draggingTable ? (
+          <div
+            {...dropTargetProps(NEW_SHEET_VALUE, (tableId) => {
+              setMoveTableId(tableId)
+              setNewSheetName('')
+              setNewSheetOpen(true)
+            })}
+            className={cn(
+              'flex min-h-24 animate-in fade-in-0 zoom-in-95 items-center justify-center rounded-xl border-2 border-dashed px-4 text-center text-xs text-muted-foreground duration-200 transition-[background-color,border-color,color,transform] ease-out motion-reduce:animate-none motion-reduce:transition-none',
+              dragOverTarget === NEW_SHEET_VALUE && 'scale-[1.01] border-primary bg-primary/5 text-foreground',
+            )}
+          >
+            여기에 놓아 새 시트 만들기
+          </div>
+        ) : null}
       </div>
 
       <Dialog open={newSheetOpen} onOpenChange={setNewSheetOpen}>
@@ -317,6 +378,9 @@ function TableChip({
   onMove,
   onNewSheet,
   otherSheets,
+  dragging,
+  onDragStart,
+  onDragEnd,
 }: {
   table: ReturnType<typeof tablesForImage>[number]
   imageName: string
@@ -324,6 +388,9 @@ function TableChip({
   onMove: (sheetId: string) => void
   onNewSheet: () => void
   otherSheets: { id: string; name: string }[]
+  dragging: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
 }) {
   const [thumb, setThumb] = useState<string | null>(null)
 
@@ -357,14 +424,23 @@ function TableChip({
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', table.id)
+        onDragStart()
+      }}
+      onDragEnd={onDragEnd}
       className={cn(
-        'flex w-36 flex-col gap-1 rounded-lg border border-border bg-card p-2 text-left text-xs shadow-sm',
-        'hover:border-primary/35',
+        'flex w-36 cursor-grab flex-col gap-1 rounded-lg border border-border bg-card p-2 text-left text-xs shadow-sm transition-[transform,opacity,box-shadow,border-color] duration-200 ease-out active:cursor-grabbing',
+        'hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md',
+        dragging && 'scale-95 opacity-40 shadow-none',
+        'motion-reduce:transition-none motion-reduce:hover:translate-y-0',
       )}
     >
       <div className="aspect-[4/3] w-full overflow-hidden rounded bg-muted">
         {thumb ? (
-          <img src={thumb} alt="" className="size-full object-cover" />
+          <img src={thumb} alt="" draggable={false} className="size-full object-cover" />
         ) : null}
       </div>
       <span className="truncate font-medium">{table.title}</span>
