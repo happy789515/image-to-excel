@@ -26,7 +26,7 @@
 | --- | --- |
 | **표 검출** | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) (ONNX, 브라우저 로컬 실행) |
 | **표 인식** | Google **Gemini** — 구조화 JSON (`rows[].cells[]`) |
-| **API·인증** | Cloudflare Workers (`/api/*`), 세션 쿠키 + 허용 사용자 목록 |
+| **API·인증** | Cloudflare Workers (`/api/*`), 세션 쿠키 + D1 사용자 계정 |
 | **UI** | React 19, shadcn/ui (base-nova), Tailwind CSS 4, Motion |
 
 > 표 검출 모델은 MIT 라이선스이며, Hugging Face 미러(`/hf` 프록시)로 모델을 받아옵니다. 상업적 이용 전 라이선스를 확인하세요.
@@ -70,13 +70,13 @@ flowchart LR
 ┌─────────────────────────────────────────────────────────┐
 │  Browser (Vite SPA)                                     │
 │  · Table Transformer (ONNX / transformers.js)           │
-│  · Workshop UI · IndexedDB 진행 상태                     │
+│  · Workshop UI · 프로젝트·이미지·표 데이터 (IndexedDB)  │
 └───────────────────────────┬─────────────────────────────┘
                             │ /api/*  (dev: Vite proxy)
                             ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Cloudflare Worker                                      │
-│  · 로그인·세션 · /api/extract-table → Gemini            │
+│  · 로그인·세션(D1 users) · /api/gemini/* → Gemini       │
 │  · /hf/* Hugging Face 프록시 · static assets (dist)     │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -100,7 +100,11 @@ cd image-to-excel
 npm install
 
 cp .dev.vars.example .dev.vars
-# .dev.vars 에 GEMINI_API_KEY, SESSION_SECRET, AUTH_USERS 설정
+# .dev.vars 에 GEMINI_API_KEY, SESSION_SECRET 설정
+
+# 로컬 D1 마이그레이션 후 로그인 계정 추가 (비밀번호는 stdin으로 입력)
+npx wrangler d1 migrations apply DB --local
+echo "your-password" | node scripts/manage-users.mjs add <username>
 
 # 터미널 1 — API (8787, 로컬 D1 마이그레이션 자동 적용)
 npm run dev:worker
@@ -109,7 +113,7 @@ npm run dev:worker
 npm run dev
 ```
 
-브라우저에서 Vite가 안내하는 주소(보통 `http://localhost:5173`)로 접속한 뒤, `.dev.vars`의 사용자로 로그인합니다.
+브라우저에서 Vite가 안내하는 주소(보통 `http://localhost:5173`)로 접속한 뒤, 추가한 계정으로 로그인합니다.
 
 첫 실행 시 **Table Transformer ONNX 모델** 다운로드로 부팅 화면이 잠시 표시될 수 있습니다.
 
@@ -134,11 +138,11 @@ npm run dev
 | --- | ---: | --- |
 | `GEMINI_API_KEY` | ✅ | Google Gemini API 키 |
 | `SESSION_SECRET` | ✅ | 세션 쿠키 HMAC용 긴 랜덤 문자열 |
-| `AUTH_USERS` | ✅ | JSON 배열 `[{"username":"…","password":"…"}]` |
-
 프로덕션에서는 Cloudflare 대시보드 또는 `wrangler secret put` 으로 동일 이름의 시크릿을 설정하세요.
 
-헬스 체크: Worker 실행 후 `GET /api/health` → `auth.sessionSecret`, `auth.authUsers` 설정 여부 확인.
+헬스 체크: Worker 실행 후 `GET /api/health` → `auth.sessionSecret`, `auth.authDb` 설정 여부 확인.
+
+기존 `AUTH_USERS` 계정을 D1로 옮기려면 `AUTH_USERS` 환경 변수를 설정한 뒤 `node scripts/manage-users.mjs seed [--remote]`를 한 번 실행하세요.
 
 ---
 
@@ -148,7 +152,7 @@ npm run dev
 npm run deploy
 ```
 
-`wrangler.jsonc` 가 `dist/` 를 SPA로 서빙하고, API 라우트는 Worker가 처리합니다. 배포 전에 Cloudflare 쪽에 위 시크릿 세 종을 반드시 넣어야 `/api/extract-table` 이 동작합니다.
+`wrangler.jsonc` 가 `dist/` 를 SPA로 서빙하고, API 라우트는 Worker가 처리합니다. 배포 전에 Cloudflare 쪽에 `GEMINI_API_KEY`, `SESSION_SECRET` 시크릿을 넣고, `npx wrangler d1 migrations apply DB --remote` 로 마이그레이션을 적용한 뒤 `node scripts/manage-users.mjs add <username> --remote` 로 계정을 추가해야 합니다. 프로젝트 데이터는 서버에 저장되지 않으므로 R2 버킷은 필요하지 않습니다.
 
 ---
 
@@ -157,9 +161,9 @@ npm run deploy
 ```text
 image-to-excel/
 ├── src/              # React 앱 (워크숍, 검출, UI)
-├── worker/           # Cloudflare Worker (auth, Gemini, HF 프록시)
+├── worker/           # Cloudflare Worker (auth, Gemini 프록시, HF 프록시)
 ├── public/           # favicon, web manifest
-├── scripts/          # 배포 검증 등
+├── scripts/          # 배포 검증, 사용자 계정 관리
 ├── wrangler.jsonc
 └── vite.config.ts    # dev 시 /api, /hf 프록시
 ```
@@ -168,7 +172,8 @@ image-to-excel/
 
 ## ⚠️ 주의
 
-- 이미지 업로드는 **PNG / JPEG / WebP**, Worker 기준 **약 8MB** 제한이 있습니다.
+- 이미지 업로드는 **PNG / JPEG / WebP**, **15MB** 이하, 프로젝트당 **30장**까지 가능합니다.
+- 프로젝트·이미지·표 데이터는 **이 브라우저의 IndexedDB**에만 저장됩니다. 기기나 브라우저를 바꾸면 보이지 않으며, 브라우저 데이터를 지우면 함께 삭제됩니다.
 - Gemini 호출은 **로그인 세션**이 있어야 하며, API 키는 브라우저에 노출되지 않습니다.
 - 표 검출은 기기 성능에 따라 초기 로딩·추론 시간이 길어질 수 있습니다.
 

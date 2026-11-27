@@ -4,8 +4,8 @@ import {
   handleMe,
   requireSession,
 } from './auth'
+import { handleGemini } from './gemini-routes'
 import { handleHuggingFaceProxy } from './hf-proxy'
-import { handleProjects } from './projects'
 
 export { UsExit } from './us-exit'
 
@@ -18,7 +18,7 @@ export default {
         ok: true,
         auth: {
           sessionSecret: Boolean(env.SESSION_SECRET?.trim()),
-          authUsers: Boolean(env.AUTH_USERS?.trim()),
+          authDb: Boolean(env.DB),
         },
       })
     }
@@ -35,10 +35,10 @@ export default {
       return handleMe(request, env)
     }
 
-    if (url.pathname === '/api/projects' || url.pathname.startsWith('/api/projects/')) {
+    if (url.pathname.startsWith('/api/gemini/')) {
       const session = await requireSession(request, env)
       if (session instanceof Response) return session
-      return handleProjects(request, env, session)
+      return handleGemini(request, env, url.pathname)
     }
 
     if (url.pathname === '/hf' || url.pathname.startsWith('/hf/')) {

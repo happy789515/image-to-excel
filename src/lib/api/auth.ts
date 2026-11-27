@@ -13,7 +13,7 @@ export type AuthCheckResult =
 
 type HealthBody = {
   ok?: boolean
-  auth?: { sessionSecret?: boolean; authUsers?: boolean }
+  auth?: { sessionSecret?: boolean; authDb?: boolean }
 }
 
 async function ensureAuthBackendReady(
@@ -32,7 +32,7 @@ async function ensureAuthBackendReady(
   if (!res.ok) return null
   const body = (await res.json().catch(() => ({}))) as HealthBody
   if (!body.auth) return null
-  if (!body.auth.sessionSecret || !body.auth.authUsers) {
+  if (!body.auth.sessionSecret || !body.auth.authDb) {
     return {
       ready: false,
       message:
