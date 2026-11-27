@@ -203,6 +203,7 @@ function QueueRow({
   onRemove: () => void
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   return (
     <m.li
@@ -221,19 +222,24 @@ function QueueRow({
       >
         <button
           type="button"
-          onClick={onSelect}
-          className="relative flex min-w-0 flex-1 items-center gap-2 rounded-md pl-1 text-left transition-colors hover:bg-background"
+          aria-label={`${item.name} 크게 보기`}
+          onClick={() => setPreviewOpen(true)}
+          className="group/thumb size-10 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
-            <img
-              src={item.previewUrl}
-              alt=""
-              className="size-full object-cover"
-            />
-          </div>
+          <img
+            src={item.previewUrl}
+            alt=""
+            className="size-full object-cover transition-transform duration-200 ease-out group-hover/thumb:scale-110 motion-reduce:transition-none"
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onSelect}
+          className="group/select relative flex min-w-0 flex-1 items-center rounded-md pl-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <span className="min-w-0 flex-1">
             <span
-              className="block truncate text-xs font-medium"
+              className="block truncate text-xs font-medium transition-[font-weight] duration-150 group-hover/select:font-bold motion-reduce:transition-none"
               title={item.name}
             >
               {item.name}
@@ -259,6 +265,21 @@ function QueueRow({
           <X />
         </Button>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-4xl" showCloseButton>
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{item.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-[75vh] justify-center overflow-auto rounded-lg bg-muted">
+            <img
+              src={item.previewUrl}
+              alt={item.name}
+              className="max-h-[75vh] w-auto max-w-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm" showCloseButton>
