@@ -152,7 +152,7 @@ npm run dev
 npm run deploy
 ```
 
-`wrangler.jsonc` 가 `dist/` 를 SPA로 서빙하고, API 라우트는 Worker가 처리합니다. 배포 전에 Cloudflare 쪽에 `GEMINI_API_KEY`, `SESSION_SECRET` 시크릿을 넣고, `npx wrangler d1 migrations apply DB --remote` 로 마이그레이션을 적용한 뒤 `node scripts/manage-users.mjs add <username> --remote` 로 계정을 추가해야 합니다. 프로젝트 데이터는 서버에 저장되지 않으므로 R2 버킷은 필요하지 않습니다.
+`wrangler.jsonc` 가 `dist/` 를 SPA로 서빙하고, API 라우트는 Worker가 처리합니다. Worker는 `placement`(`gcp:asia-northeast3`, 서울)에 배치되고, Gemini 호출은 Durable Object `UsExit`(`apac-ne` 힌트)를 거쳐 나갑니다. 포크해서 배포할 때는 `d1_databases[].database_id`를 본인 D1 ID로 교체하세요. 배포 전에 Cloudflare 쪽에 `GEMINI_API_KEY`, `SESSION_SECRET` 시크릿을 넣고, `npx wrangler d1 migrations apply DB --remote` 로 마이그레이션을 적용한 뒤 `node scripts/manage-users.mjs add <username> --remote` 로 계정을 추가해야 합니다. 프로젝트 데이터는 서버에 저장되지 않으므로 R2 버킷은 필요하지 않습니다.
 
 ---
 
