@@ -42,14 +42,17 @@ async function renderCrop(
 
 export function SheetCropThumb({ table, imageName, fetchImageBlob }: Props) {
   const [thumb, setThumb] = useState<string | null>(null)
-  const [large, setLarge] = useState<string | null>(null)
+  const [largeCache, setLargeCache] = useState<{ key: string; url: string } | null>(
+    null,
+  )
   const [open, setOpen] = useState(false)
   const { imageId } = table
   const { xmin, ymin, xmax, ymax } = table.box
+  const cropKey = `${imageId}:${xmin},${ymin},${xmax},${ymax}`
+  const large = largeCache?.key === cropKey ? largeCache.url : null
 
   useEffect(() => {
     const ac = new AbortController()
-    setLarge(null)
     void (async () => {
       try {
         const blob = await fetchImageBlob(imageId, ac.signal)
@@ -69,13 +72,13 @@ export function SheetCropThumb({ table, imageName, fetchImageBlob }: Props) {
       try {
         const blob = await fetchImageBlob(imageId, ac.signal)
         const url = await renderCrop(blob, { xmin, ymin, xmax, ymax }, 0)
-        if (!ac.signal.aborted) setLarge(url)
+        if (!ac.signal.aborted) setLargeCache({ key: cropKey, url })
       } catch (err) {
         if (!ac.signal.aborted) console.error('Failed to render large crop', err)
       }
     })()
     return () => ac.abort()
-  }, [open, large, fetchImageBlob, imageId, xmin, ymin, xmax, ymax])
+  }, [open, large, cropKey, fetchImageBlob, imageId, xmin, ymin, xmax, ymax])
 
   return (
     <div onClick={(e) => e.stopPropagation()}>
