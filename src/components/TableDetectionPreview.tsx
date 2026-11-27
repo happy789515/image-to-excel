@@ -1,32 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ChevronRight,
-  Download,
-  Image,
-  Loader2,
-  Plus,
-  Scan,
-  Settings,
-  Table2,
-} from 'lucide-react'
+import { Image, Loader2, Plus, Scan, Settings } from 'lucide-react'
+import { AnimatePresence, m } from 'motion/react'
 
 import {
   EditableBBoxLayer,
   type EditableBox,
 } from '@/components/EditableBBoxLayer'
-import { ConvertStepView } from '@/components/workshop/ConvertStepView'
 import { RegionSheetStrip } from '@/components/workshop/RegionSheetStrip'
-import { ReviewStepView } from '@/components/workshop/ReviewStepView'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   Popover,
   PopoverContent,
@@ -37,72 +19,41 @@ import {
 } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import { defaultBoxTitle, withTitleOnAppend } from '@/lib/bbox/box-title'
+import { BboxCropPanel } from '@/components/BboxCropPanel'
+import { PanZoomViewport } from '@/components/PanZoomViewport'
+import { defaultBoxTitle, normalizeBoxTitles, withTitleOnAppend } from '@/lib/bbox/box-title'
 import {
   computeFitLayout,
   defaultCenterBox,
   type ImageLayout,
 } from '@/lib/bbox/geometry'
-import {
-  detectionEmptyHintMessage,
-  loadDetectionResult,
-  persistDetectionResult,
-} from '@/lib/detection-persist'
-import {
-  exportSessionMatches,
-  exportStillValid,
-  boxesGeometrySignature,
-} from '@/lib/workshop-export-signature'
-import {
-  getWorkshopHydration,
-  setWorkshopHydration,
-} from '@/lib/workshop-hydration-cache'
-import {
-  loadWorkshopSession,
-  persistWorkshopSession,
-  resolveWorkshopStepAfterRestore,
-} from '@/lib/workshop-persist'
-import type { StoredDetection } from '@/lib/detection-persist'
-import type { StoredWorkshopSession } from '@/lib/workshop-persist'
-import { BboxCropPanel } from '@/components/BboxCropPanel'
-import {
-  TableExportActions,
-  TableExportStatus,
-  type ExportReady,
-} from '@/components/TableExportPanel'
-import { useTableExport } from '@/hooks/use-table-export'
-import { buildXlsxBlob } from '@/lib/excel/build-xlsx'
-import type { ExportSheet } from '@/lib/excel/build-xlsx'
+import { detectionEmptyHintMessage } from '@/lib/detection-messages'
+import { putDetection, type TableJson } from '@/lib/api/projects'
 import { detectTablesInImage } from '@/lib/table-detection/detector'
 import type { TableDetectionBox } from '@/lib/table-detection/types'
-import type { WorkshopStepBridge } from '@/lib/workflow/workshop-step-bridge'
-import {
-  type WorkshopStepId,
-} from '@/lib/workflow/workshop-steps'
 import type { WorkflowPhaseId } from '@/lib/workflow/types'
-import type { StepAccess } from '@/components/workshop/WorkflowStepBar'
-import { PanZoomViewport } from '@/components/PanZoomViewport'
 import {
   motionInitial,
   motionTransition,
   useReducedMotion,
 } from '@/lib/motion/use-reduced-motion'
-import {
-  fadeUp,
-  panelSwitchForward,
-  springSnappy,
-  staggerContainerFast,
-  staggerItem,
-} from '@/lib/motion/variants'
-import { AnimatePresence, m } from 'motion/react'
+import { fadeUp, springSnappy, staggerContainerFast, staggerItem } from '@/lib/motion/variants'
 import { cn } from 'cn'
+import { useProjectWorkshop } from '@/hooks/use-project-workshop'
+import { tablesForImage } from '@/lib/project/selectors'
 
 type Props = {
-  fileId: string
+  imageId: string
   imageUrl: string
-  file: File
+  imageBlob: Blob | null
+  serverTables: TableJson[]
+  detectionMeta: {
+    threshold: number
+    emptyHint: boolean
+    selectedId: string | null
+  } | null
   onPhase?: (phase: WorkflowPhaseId, detail?: string) => void
-  onStepBridgeChange?: (bridge: WorkshopStepBridge | null) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
 type Phase = 'idle' | 'detecting' | 'done' | 'error'
@@ -115,6 +66,18 @@ function toEditable(items: TableDetectionBox[]): EditableBox[] {
   }))
 }
 
+function tablesToEditable(tables: TableJson[]): EditableBox[] {
+  return normalizeBoxTitles(
+    tables.map((t) => ({
+      id: t.id,
+      title: t.title,
+      label: t.label,
+      score: t.score,
+      box: t.box,
+    })),
+  )
+}
+
 function resolveSelectedId(
   boxes: EditableBox[],
   preferred: string | null,
@@ -123,86 +86,239 @@ function resolveSelectedId(
   return boxes[0]?.id ?? null
 }
 
-export function TableDetectionPreview({
-  fileId,
+function boxToPayload(box: EditableBox) {
+  return {
+    id: box.id,
+    title: box.title,
+    label: box.label,
+    score: box.score,
+    box: box.box,
+  }
+}
+
+export function TableDetectionPreview(props: Props) {
+  return <TableDetectionPreviewInner key={props.imageId} {...props} />
+}
+
+function TableDetectionPreviewInner({
+  imageId,
   imageUrl,
-  file,
+  imageBlob,
+  serverTables,
+  detectionMeta,
   onPhase,
-  onStepBridgeChange,
+  onBusyChange,
 }: Props) {
-  /** Canvas crop source — always decodable (detect grid may be max-h-0 on convert). */
+  const fromServer = serverTables.length > 0
+  const { projectId, setDetail } = useProjectWorkshop()
   const cropSourceRef = useRef<HTMLImageElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [workshopStep, setWorkshopStep] = useState<WorkshopStepId>('detect')
-  const [boxes, setBoxes] = useState<EditableBox[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [emptyHint, setEmptyHint] = useState(false)
-  const [threshold, setThreshold] = useState(0.5)
+  const [phase, setPhase] = useState<Phase>(fromServer ? 'done' : 'idle')
+  const [boxes, setBoxes] = useState<EditableBox[]>(() =>
+    fromServer ? tablesToEditable(serverTables) : [],
+  )
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    fromServer
+      ? resolveSelectedId(
+          tablesToEditable(serverTables),
+          detectionMeta?.selectedId ?? null,
+        )
+      : null,
+  )
+  const [error, setError] = useState<string | null>(() =>
+    fromServer
+      ? detectionEmptyHintMessage(
+          serverTables.length === 0 && Boolean(detectionMeta?.emptyHint),
+        )
+      : null,
+  )
+  const [emptyHint, setEmptyHint] = useState(
+    () => detectionMeta?.emptyHint ?? (fromServer ? serverTables.length === 0 : false),
+  )
+  const [threshold, setThreshold] = useState(
+    () => detectionMeta?.threshold ?? 0.5,
+  )
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(
     null,
   )
   const [imageRevision, setImageRevision] = useState(0)
   const [fitLayout, setFitLayout] = useState<ImageLayout | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
-  const [cacheReady, setCacheReady] = useState(false)
-  const [sessionReady, setSessionReady] = useState(false)
-  const skipAutoOnceRef = useRef(false)
-  const workshopStepRef = useRef<WorkshopStepId>('detect')
-  const onPhaseRef = useRef(onPhase)
-  const [exportSheets, setExportSheets] = useState<ExportSheet[] | null>(null)
-  const [downloadFileName, setDownloadFileName] = useState('')
-  const [exportSignature, setExportSignature] = useState<string | null>(null)
-  const [reviewCommitted, setReviewCommitted] = useState(false)
-  const [reviewDirty, setReviewDirty] = useState(false)
-  const [discardReviewOpen, setDiscardReviewOpen] = useState(false)
-  const pendingStepRef = useRef<WorkshopStepId | null>(null)
+  const saveTimerRef = useRef<number | null>(null)
+  const saveAbortRef = useRef<AbortController | null>(null)
+  const stateRef = useRef({
+    threshold,
+    emptyHint,
+    selectedId,
+    boxes,
+  })
 
   useEffect(() => {
-    onPhaseRef.current = onPhase
-  }, [onPhase])
+    stateRef.current = { threshold, emptyHint, selectedId, boxes }
+  }, [boxes, emptyHint, selectedId, threshold])
+
+  const busy = phase === 'detecting'
 
   useEffect(() => {
-    workshopStepRef.current = workshopStep
-  }, [workshopStep])
+    onBusyChange?.(busy)
+  }, [busy, onBusyChange])
 
-  const exportBlob = useMemo(() => {
-    if (!exportSheets?.length) return null
-    return buildXlsxBlob(exportSheets)
-  }, [exportSheets])
+  const flushDetectionSave = useCallback(async () => {
+    if (phase !== 'done' && phase !== 'error') return
+    saveAbortRef.current?.abort()
+    const ac = new AbortController()
+    saveAbortRef.current = ac
+    const { threshold: th, emptyHint: eh, selectedId: sid, boxes: bx } =
+      stateRef.current
+    try {
+      const next = await putDetection(
+        projectId,
+        imageId,
+        {
+          threshold: th,
+          emptyHint: eh,
+          selectedId: sid,
+          boxes: bx.map(boxToPayload),
+        },
+        ac.signal,
+      )
+      if (!ac.signal.aborted) {
+        setDetail(next)
+        setBoxes(tablesToEditable(tablesForImage(next, imageId)))
+        setSaveError(null)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      if (err instanceof Error) setSaveError(err.message)
+    }
+  }, [imageId, phase, projectId, setDetail])
 
-  const activeSheetIndex = useMemo(() => {
-    if (!selectedId) return 0
-    const idx = boxes.findIndex((b) => b.id === selectedId)
-    return idx >= 0 ? idx : 0
-  }, [boxes, selectedId])
-
-  const exportStale =
-    exportSheets !== null && !exportStillValid(boxes, exportSignature)
-
-  const resetExport = useCallback(() => {
-    setExportSheets(null)
-    setDownloadFileName('')
-    setExportSignature(null)
-    setReviewCommitted(false)
-    setReviewDirty(false)
-  }, [])
+  const scheduleSave = useCallback(() => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null
+      void flushDetectionSave()
+    }, 600)
+  }, [flushDetectionSave])
 
   useEffect(() => {
-    if (
-      exportSheets === null ||
-      exportSignature === null ||
-      exportStillValid(boxes, exportSignature)
-    ) {
+    if (phase !== 'done') return
+    scheduleSave()
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
+  }, [boxes, threshold, selectedId, emptyHint, phase, scheduleSave])
+
+  useEffect(() => {
+    return () => {
+      void flushDetectionSave()
+    }
+  }, [imageId, flushDetectionSave])
+
+  const applyDetection = useCallback(
+    (editable: EditableBox[], noTables: boolean) => {
+      setBoxes(editable)
+      setSelectedId(resolveSelectedId(editable, detectionMeta?.selectedId ?? null))
+      setEmptyHint(noTables)
+      setError(noTables ? detectionEmptyHintMessage(true) : null)
+      setPhase('done')
+      onPhase?.(
+        'review',
+        noTables
+          ? '검출된 영역이 없습니다. 영역을 추가하세요.'
+          : '영역을 확인한 뒤 시트 그룹 단계로 이동하세요.',
+      )
+    },
+    [detectionMeta?.selectedId, onPhase],
+  )
+
+  const runDetection = useCallback(
+    async (isStale?: () => boolean) => {
+      if (!imageBlob) return
+      setError(null)
+      setEmptyHint(false)
+      setSaveError(null)
+      try {
+        setPhase('detecting')
+        onPhase?.('detecting', '브라우저 ONNX 모델로 표 bbox를 검출하는 중…')
+        const file =
+          imageBlob instanceof File
+            ? imageBlob
+            : new File([imageBlob], 'image', { type: imageBlob.type })
+        const result = await detectTablesInImage(file, { threshold })
+        if (isStale?.()) return
+        const editable = toEditable(result)
+        applyDetection(editable, result.length === 0)
+      } catch (err) {
+        if (isStale?.()) return
+        console.error(err)
+        setPhase('error')
+        setError('표 검출 중 오류가 발생했습니다.')
+        onPhase?.('error', '표 검출 실패')
+      }
+    },
+    [applyDetection, imageBlob, onPhase, threshold],
+  )
+
+  useEffect(() => {
+    if (fromServer) {
+      onPhase?.('review', '저장된 표 영역을 불러왔습니다.')
       return
     }
-    const step = workshopStep
-    queueMicrotask(() => {
-      resetExport()
-      if (step === 'review') setWorkshopStep('convert')
-    })
-  }, [boxes, exportSheets, exportSignature, resetExport, workshopStep])
+    if (!imageBlob) return
+    let cancelled = false
+    const file =
+      imageBlob instanceof File
+        ? imageBlob
+        : new File([imageBlob], 'image', { type: imageBlob.type })
+
+    void Promise.resolve()
+      .then(() => {
+        if (cancelled) return
+        setError(null)
+        setEmptyHint(false)
+        setSaveError(null)
+        setPhase('detecting')
+        onPhase?.('detecting', '브라우저 ONNX 모델로 표 bbox를 검출하는 중…')
+        return detectTablesInImage(file, { threshold })
+      })
+      .then((result) => {
+        if (cancelled || !result) return
+        const editable = toEditable(result)
+        setBoxes(editable)
+        setSelectedId(
+          resolveSelectedId(editable, detectionMeta?.selectedId ?? null),
+        )
+        setEmptyHint(result.length === 0)
+        setError(detectionEmptyHintMessage(result.length === 0))
+        setPhase('done')
+        onPhase?.(
+          'review',
+          result.length === 0
+            ? '검출된 영역이 없습니다. 영역을 추가하세요.'
+            : '영역을 확인한 뒤 시트 그룹 단계로 이동하세요.',
+        )
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error(err)
+        setPhase('error')
+        setError('표 검출 중 오류가 발생했습니다.')
+        onPhase?.('error', '표 검출 실패')
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // Auto-detect once per image mount; threshold changes use manual re-detect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- imageId reset via outer key
+  }, [fromServer, imageBlob])
 
   const refreshFitLayout = useCallback(() => {
     const host = viewportRef.current
@@ -237,209 +353,6 @@ export function TableDetectionPreview({
     observer.observe(host)
     return () => observer.disconnect()
   }, [refreshFitLayout, imageUrl])
-
-  useEffect(() => {
-    const source = cropSourceRef.current
-    if (source?.complete && source.naturalWidth > 0) {
-      onCropSourceLoad(source)
-    }
-  }, [imageUrl, onCropSourceLoad])
-
-  const applyDetection = useCallback(
-    (editable: EditableBox[], noTables: boolean) => {
-      setBoxes(editable)
-      setSelectedId(resolveSelectedId(editable, null))
-      setEmptyHint(noTables)
-      setError(noTables ? detectionEmptyHintMessage(true) : null)
-      setPhase('done')
-      onPhase?.(
-        'review',
-        noTables
-          ? '검출된 영역이 없습니다. 영역을 추가하세요.'
-          : '영역을 확인한 뒤 엑셀 변환 단계로 이동하세요.',
-      )
-    },
-    [onPhase],
-  )
-
-  const runDetection = useCallback(
-    async (isStale?: () => boolean, invalidateDownstream = false) => {
-      if (invalidateDownstream) resetExport()
-      setError(null)
-      setEmptyHint(false)
-      try {
-        setPhase('detecting')
-        onPhase?.('detecting', '브라우저 ONNX 모델로 표 bbox를 검출하는 중…')
-        const result = await detectTablesInImage(file, { threshold })
-        if (isStale?.()) return
-        const editable = toEditable(result)
-        applyDetection(editable, result.length === 0)
-      } catch (err) {
-        if (isStale?.()) return
-        console.error(err)
-        setPhase('error')
-        setError('표 검출 중 오류가 발생했습니다.')
-        onPhase?.('error', '표 검출 실패')
-      }
-    },
-    [applyDetection, file, resetExport, threshold, onPhase],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    skipAutoOnceRef.current = false
-
-    const applyBundle = (
-      saved: StoredDetection | null,
-      session: StoredWorkshopSession | null,
-    ) => {
-      const boxesForSession = saved?.boxes ?? []
-
-      if (saved) {
-        skipAutoOnceRef.current = true
-        setThreshold(saved.threshold)
-        setBoxes(saved.boxes)
-        setSelectedId(resolveSelectedId(saved.boxes, saved.selectedId))
-        setEmptyHint(saved.emptyHint)
-        setError(detectionEmptyHintMessage(saved.emptyHint))
-        setPhase('done')
-        onPhaseRef.current?.(
-          'review',
-          '이전 검출 결과를 복원했습니다. 필요하면 다시 검출하세요.',
-        )
-      } else {
-        setWorkshopStep('detect')
-        resetExport()
-      }
-
-      if (session) {
-        const exportOk = exportSessionMatches(session, boxesForSession)
-        if (exportOk) {
-          setExportSheets(session.exportSheets)
-          setDownloadFileName(session.downloadFileName)
-          setExportSignature(session.exportSignature)
-        } else {
-          resetExport()
-        }
-        setReviewCommitted(Boolean(session.reviewCommitted) && exportOk)
-        setWorkshopStep(
-          resolveWorkshopStepAfterRestore(session.workshopStep, exportOk),
-        )
-      } else if (saved) {
-        setWorkshopStep('detect')
-        setReviewCommitted(false)
-      }
-    }
-
-    const finishHydration = () => {
-      if (cancelled) return
-      setCacheReady(true)
-      setSessionReady(true)
-    }
-
-    const cached = getWorkshopHydration(fileId)
-    if (cached) {
-      queueMicrotask(() => {
-        if (cancelled) return
-        applyBundle(cached.detection, cached.session)
-        finishHydration()
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    void (async () => {
-      try {
-        const [saved, session] = await Promise.all([
-          loadDetectionResult(fileId),
-          loadWorkshopSession(fileId),
-        ])
-        if (cancelled) return
-
-        const bundle = { detection: saved, session }
-        setWorkshopHydration(fileId, bundle)
-        queueMicrotask(() => {
-          if (cancelled) return
-          applyBundle(saved, session)
-          finishHydration()
-        })
-      } catch (err) {
-        console.error(err)
-        finishHydration()
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [fileId, resetExport])
-
-  useEffect(() => {
-    if (!cacheReady) return
-    if (skipAutoOnceRef.current) {
-      skipAutoOnceRef.current = false
-      return
-    }
-
-    let cancelled = false
-    queueMicrotask(() => {
-      void runDetection(() => cancelled)
-    })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cacheReady + fileId
-  }, [cacheReady, fileId])
-
-  useEffect(() => {
-    if (!cacheReady || phase !== 'done') return undefined
-
-    const handle = window.setTimeout(() => {
-      void persistDetectionResult({
-        fileId,
-        threshold,
-        selectedId,
-        boxes,
-        emptyHint,
-      }).catch((err) => console.error(err))
-    }, 400)
-
-    return () => window.clearTimeout(handle)
-  }, [fileId, boxes, threshold, selectedId, emptyHint, phase, cacheReady])
-
-  useEffect(() => {
-    if (!sessionReady) return undefined
-
-    const handle = window.setTimeout(() => {
-      const payload = {
-        fileId,
-        workshopStep,
-        exportSheets,
-        downloadFileName,
-        exportSignature,
-        reviewCommitted,
-      }
-      const cached = getWorkshopHydration(fileId)
-      if (cached) {
-        setWorkshopHydration(fileId, {
-          ...cached,
-          session: { ...payload, updatedAt: Date.now() },
-        })
-      }
-      void persistWorkshopSession(payload).catch((err) => console.error(err))
-    }, 400)
-
-    return () => window.clearTimeout(handle)
-  }, [
-    fileId,
-    workshopStep,
-    exportSheets,
-    downloadFileName,
-    exportSignature,
-    reviewCommitted,
-    sessionReady,
-  ])
 
   const addManualBox = useCallback(() => {
     if (!naturalSize) return
@@ -478,173 +391,15 @@ export function TableDetectionPreview({
     [selectedId],
   )
 
-  const onExportReady = useCallback(
-    (result: ExportReady | null) => {
-      if (!result) {
-        resetExport()
-        return
-      }
-      const signature = boxesGeometrySignature(boxes)
-      setExportSheets(result.sheets)
-      setDownloadFileName(result.downloadFileName)
-      setExportSignature(signature)
-      setReviewCommitted(false)
-      const sessionPayload = {
-        fileId,
-        workshopStep: workshopStepRef.current,
-        exportSheets: result.sheets,
-        downloadFileName: result.downloadFileName,
-        exportSignature: signature,
-        reviewCommitted: false,
-      }
-      const cached = getWorkshopHydration(fileId)
-      if (cached) {
-        setWorkshopHydration(fileId, {
-          ...cached,
-          session: { ...sessionPayload, updatedAt: Date.now() },
-        })
-      }
-      void persistWorkshopSession(sessionPayload).catch((err) =>
-        console.error(err),
-      )
-    },
-    [boxes, fileId, resetExport],
-  )
-
-  const exportCtrl = useTableExport({
-    file,
-    boxes,
-    onPhase,
-    onExportReady,
-  })
-  const { converting } = exportCtrl
-
-  const navigateStepInner = useCallback(
-    (target: WorkshopStepId) => {
-      if (target === 'detect') {
-        setWorkshopStep('detect')
-        return
-      }
-      if (target === 'convert' && boxes.length > 0) {
-        setWorkshopStep('convert')
-        setImageRevision((n) => n + 1)
-        return
-      }
-      if (
-        target === 'review' &&
-        exportSheets?.length &&
-        exportBlob &&
-        !exportStale
-      ) {
-        setReviewDirty(false)
-        setWorkshopStep('review')
-      }
-    },
-    [boxes.length, exportBlob, exportSheets?.length, exportStale],
-  )
-
-  const attemptNavigateStep = useCallback(
-    (target: WorkshopStepId) => {
-      if (workshopStep === 'review' && reviewDirty && target !== 'review') {
-        pendingStepRef.current = target
-        setDiscardReviewOpen(true)
-        return
-      }
-      navigateStepInner(target)
-    },
-    [navigateStepInner, reviewDirty, workshopStep],
-  )
-
-  const handleReviewCommit = useCallback(
-    (sheets: ExportSheet[]) => {
-      setExportSheets(sheets)
-      setReviewCommitted(true)
-      setReviewDirty(false)
-      const payload = {
-        fileId,
-        workshopStep,
-        exportSheets: sheets,
-        downloadFileName,
-        exportSignature,
-        reviewCommitted: true,
-      }
-      const cached = getWorkshopHydration(fileId)
-      if (cached) {
-        setWorkshopHydration(fileId, {
-          ...cached,
-          session: { ...payload, updatedAt: Date.now() },
-        })
-      }
-      void persistWorkshopSession(payload).catch((err) => console.error(err))
-    },
-    [
-      downloadFileName,
-      exportSignature,
-      fileId,
-      workshopStep,
-    ],
-  )
-
-  const handleConvertSheetsChange = useCallback(
-    (sheets: ExportSheet[]) => {
-      setExportSheets(sheets)
-      setReviewCommitted(false)
-      setReviewDirty(false)
-    },
-    [],
-  )
-
-  const confirmDiscardReview = useCallback(() => {
-    setReviewDirty(false)
-    const target = pendingStepRef.current
-    pendingStepRef.current = null
-    setDiscardReviewOpen(false)
-    if (target) navigateStepInner(target)
-  }, [navigateStepInner])
-
-  const busy = phase === 'detecting' || converting
-
-  const stepAccess: StepAccess = useMemo(
-    () => ({
-      detect: true,
-      convert: boxes.length > 0 && phase !== 'detecting',
-      review:
-        Boolean(exportSheets?.length && exportBlob && !exportStale) && !converting,
-    }),
-    [boxes.length, converting, exportBlob, exportSheets?.length, exportStale, phase],
-  )
-
-  useEffect(() => {
-    onStepBridgeChange?.({
-      fileId,
-      current: workshopStep,
-      access: stepAccess,
-      busy,
-      navigate: attemptNavigateStep,
-      reviewDirty,
-      reviewCommitted,
-      exportReady: Boolean(exportSheets?.length && !exportStale),
-    })
-  }, [
-    attemptNavigateStep,
-    busy,
-    exportSheets?.length,
-    exportStale,
-    fileId,
-    onStepBridgeChange,
-    reviewCommitted,
-    reviewDirty,
-    stepAccess,
-    workshopStep,
-  ])
-
-  useEffect(() => {
-    return () => onStepBridgeChange?.(null)
-  }, [fileId, onStepBridgeChange])
-
   const reduced = useReducedMotion()
   const stepTransition = motionTransition(reduced, springSnappy)
-  const stepVariants = panelSwitchForward
+
+  const alerts = useMemo(() => {
+    const items: string[] = []
+    if (error) items.push(error)
+    if (saveError) items.push(saveError)
+    return items
+  }, [error, saveError])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -660,10 +415,11 @@ export function TableDetectionPreview({
         className="pointer-events-none fixed left-0 top-0 opacity-0"
         onLoad={(e) => onCropSourceLoad(e.currentTarget)}
       />
+
       <AnimatePresence initial={false}>
-        {workshopStep === 'detect' && error ? (
+        {alerts.map((msg) => (
           <m.div
-            key="detect-error"
+            key={msg}
             variants={fadeUp}
             initial={motionInitial(reduced)}
             animate="animate"
@@ -671,27 +427,13 @@ export function TableDetectionPreview({
             transition={stepTransition}
           >
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{msg}</AlertDescription>
             </Alert>
           </m.div>
-        ) : null}
+        ))}
       </AnimatePresence>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <AnimatePresence mode="wait" initial={false}>
-          {workshopStep === 'detect' ? (
-            <m.div
-              key="detect"
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
-              variants={stepVariants}
-              initial={motionInitial(reduced)}
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-            >
-      <div
-        className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-hidden"
-      >
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-hidden">
         <section
           aria-label="원본 이미지"
           className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
@@ -704,13 +446,13 @@ export function TableDetectionPreview({
               </span>
             </p>
             <DetectToolbar
-              fileId={fileId}
+              imageId={imageId}
               threshold={threshold}
-              busy={busy}
+              busy={busy || !imageBlob}
               naturalSize={naturalSize}
               onThreshold={setThreshold}
               onAddBox={addManualBox}
-              onRedetect={() => void runDetection(undefined, true)}
+              onRedetect={() => void runDetection()}
               detecting={phase === 'detecting'}
             />
           </div>
@@ -748,7 +490,7 @@ export function TableDetectionPreview({
                   draggable={false}
                   onLoad={() => refreshFitLayout()}
                 />
-                {fitLayout && workshopStep === 'detect' ? (
+                {fitLayout ? (
                   <EditableBBoxLayer
                     boxes={boxes}
                     selectedId={selectedId}
@@ -795,132 +537,16 @@ export function TableDetectionPreview({
                 )
               }}
               onDelete={removeBoxById}
-              action={
-                <Button
-                  type="button"
-                  className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
-                  disabled={boxes.length === 0 || phase === 'detecting'}
-                  onClick={() => attemptNavigateStep('convert')}
-                >
-                  <Table2 className="size-5" aria-hidden />
-                  <span className="flex items-center gap-0.5">
-                    엑셀 변환
-                    <ChevronRight className="size-4" aria-hidden />
-                  </span>
-                </Button>
-              }
             />
           </m.div>
         </m.div>
       ) : null}
-            </m.div>
-          ) : null}
-
-          {workshopStep === 'convert' ? (
-            <m.div
-              key="convert"
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
-              variants={stepVariants}
-              initial={motionInitial(reduced)}
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-            >
-              <ConvertStepView
-                imageRef={cropSourceRef}
-                imageRevision={imageRevision}
-                boxes={boxes}
-                selectedId={selectedId}
-                onSelectBox={setSelectedId}
-                sheets={exportStale ? null : exportSheets}
-                activeSheetIndex={activeSheetIndex}
-                onSelectSheetIndex={(index) => {
-                  setSelectedId(boxes[index]?.id ?? null)
-                }}
-                onSheetsChange={handleConvertSheetsChange}
-                converting={converting}
-                exportActions={<TableExportActions {...exportCtrl} size="xs" />}
-                sheetStripAction={
-                  <Button
-                    type="button"
-                    className="h-full min-h-[7.5rem] shrink-0 flex-col gap-2 px-4"
-                    disabled={
-                      !exportSheets?.length ||
-                      exportStale ||
-                      converting ||
-                      !exportBlob
-                    }
-                    onClick={() => attemptNavigateStep('review')}
-                  >
-                    <Download className="size-5" aria-hidden />
-                    <span className="flex items-center gap-0.5">
-                      검수 및 다운로드
-                      <ChevronRight className="size-4" aria-hidden />
-                    </span>
-                  </Button>
-                }
-              />
-
-              <TableExportStatus {...exportCtrl} />
-            </m.div>
-          ) : null}
-
-          {workshopStep === 'review' && exportSheets && exportBlob ? (
-            <m.div
-              key="review"
-              className="flex min-h-0 flex-1 flex-col overflow-hidden"
-              variants={stepVariants}
-              initial={motionInitial(reduced)}
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-            >
-              <ReviewStepView
-                committedSheets={exportSheets}
-                activeIndex={activeSheetIndex}
-                onSelectIndex={(index) => setSelectedId(boxes[index]?.id ?? null)}
-                downloadFileName={downloadFileName}
-                reviewCommitted={reviewCommitted}
-                onDirtyChange={setReviewDirty}
-                onCommit={handleReviewCommit}
-              />
-            </m.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
-
-      <Dialog open={discardReviewOpen} onOpenChange={setDiscardReviewOpen}>
-        <DialogContent className="sm:max-w-sm" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>저장되지 않은 변경사항</DialogTitle>
-            <DialogDescription>
-              검수 단계에서 수정한 내용이 아직 저장되지 않았습니다. 저장하지 않고
-              이동하면 변경 사항이 사라집니다.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                pendingStepRef.current = null
-                setDiscardReviewOpen(false)
-              }}
-            >
-              취소
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirmDiscardReview}>
-              저장 안 함
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
 
 function DetectToolbar({
-  fileId,
+  imageId,
   threshold,
   busy,
   naturalSize,
@@ -929,7 +555,7 @@ function DetectToolbar({
   onRedetect,
   detecting,
 }: {
-  fileId: string
+  imageId: string
   threshold: number
   busy: boolean
   naturalSize: { w: number; h: number } | null
@@ -958,13 +584,13 @@ function DetectToolbar({
           </PopoverHeader>
           <div className="flex items-center gap-2">
             <Label
-              htmlFor={`th-${fileId}`}
+              htmlFor={`th-${imageId}`}
               className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
             >
               {threshold.toFixed(2)}
             </Label>
             <Slider
-              id={`th-${fileId}`}
+              id={`th-${imageId}`}
               min={0.2}
               max={0.95}
               step={0.05}

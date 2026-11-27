@@ -4,8 +4,8 @@ import {
   handleMe,
   requireSession,
 } from './auth'
-import { handleExtractTable } from './extract-table'
 import { handleHuggingFaceProxy } from './hf-proxy'
+import { handleProjects } from './projects'
 
 export { UsExit } from './us-exit'
 
@@ -35,10 +35,10 @@ export default {
       return handleMe(request, env)
     }
 
-    if (url.pathname === '/api/extract-table' && request.method === 'POST') {
+    if (url.pathname === '/api/projects' || url.pathname.startsWith('/api/projects/')) {
       const session = await requireSession(request, env)
       if (session instanceof Response) return session
-      return handleExtractTable(request, env)
+      return handleProjects(request, env, session)
     }
 
     if (url.pathname === '/hf' || url.pathname.startsWith('/hf/')) {
