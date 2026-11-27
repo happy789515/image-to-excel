@@ -4,5 +4,4 @@ GEMINI_API_KEY=
 # HMAC secret for session cookies (use a long random string in production).
 SESSION_SECRET=change-me-to-a-long-random-secret
 
-# JSON allowlist — never commit real passwords to git.
-AUTH_USERS='[{"username":"demo","password":"demo"}]'
+# Login accounts live in the D1 users table: node scripts/manage-users.mjs add <username>

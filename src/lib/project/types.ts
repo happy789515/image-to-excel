@@ -1,4 +1,4 @@
-/** API contract types (shared with frontend). */
+/** Project domain types shared by the browser (IndexedDB) and the Gemini proxy Worker. */
 
 export type Box = {
   id: string

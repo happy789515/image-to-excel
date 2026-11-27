@@ -1,3 +1,4 @@
+import { hashPassword, verifyPassword, type PasswordRecord } from './password'
 import {
   clearSessionCookieHeader,
   createSessionToken,
@@ -7,54 +8,8 @@ import {
   type SessionPayload,
 } from './session'
 
-export type AuthUser = { username: string; password: string }
-
 function jsonError(status: number, message: string, code?: string): Response {
   return Response.json({ error: message, code }, { status })
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder()
-  const ab = enc.encode(a)
-  const bb = enc.encode(b)
-  if (ab.length !== bb.length) return false
-  let mismatch = 0
-  for (let i = 0; i < ab.length; i++) mismatch |= ab[i]! ^ bb[i]!
-  return mismatch === 0
-}
-
-export function parseAuthUsers(raw: string | undefined): AuthUser[] {
-  if (!raw?.trim()) return []
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    const users: AuthUser[] = []
-    for (const entry of parsed) {
-      if (
-        entry &&
-        typeof entry === 'object' &&
-        typeof (entry as AuthUser).username === 'string' &&
-        typeof (entry as AuthUser).password === 'string'
-      ) {
-        users.push({
-          username: (entry as AuthUser).username,
-          password: (entry as AuthUser).password,
-        })
-      }
-    }
-    return users
-  } catch {
-    return []
-  }
-}
-
-function findValidUser(users: AuthUser[], username: string, password: string): boolean {
-  for (const user of users) {
-    if (user.username === username && timingSafeEqual(user.password, password)) {
-      return true
-    }
-  }
-  return false
 }
 
 export async function requireSession(
@@ -77,14 +32,19 @@ export async function requireSession(
 
 type LoginBody = { username?: string; password?: string }
 
-export async function handleLogin(request: Request, env: Env): Promise<Response> {
-  if (!env.SESSION_SECRET?.trim() || !env.AUTH_USERS?.trim()) {
-    return jsonError(503, 'Login is not configured', 'AUTH_NOT_CONFIGURED')
-  }
+type UserRow = PasswordRecord & { username: string }
 
-  const users = parseAuthUsers(env.AUTH_USERS)
-  if (users.length === 0) {
-    return jsonError(503, 'No login accounts configured', 'AUTH_NOT_CONFIGURED')
+async function findUser(env: Env, username: string): Promise<UserRow | null> {
+  return env.DB.prepare(
+    'SELECT username, password_hash AS passwordHash, salt, iterations FROM users WHERE username = ?',
+  )
+    .bind(username)
+    .first<UserRow>()
+}
+
+export async function handleLogin(request: Request, env: Env): Promise<Response> {
+  if (!env.SESSION_SECRET?.trim()) {
+    return jsonError(503, 'Login is not configured', 'AUTH_NOT_CONFIGURED')
   }
 
   let body: LoginBody
@@ -101,15 +61,23 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     return jsonError(400, 'Username and password are required')
   }
 
-  if (!findValidUser(users, username, password)) {
+  const user = await findUser(env, username)
+  if (!user) {
+    // Burn the same PBKDF2 cost for unknown users to avoid revealing which usernames exist.
+    await hashPassword(password)
     return jsonError(401, 'Invalid credentials', 'INVALID_CREDENTIALS')
   }
 
-  const token = await createSessionToken(username, env.SESSION_SECRET)
+  const valid = await verifyPassword(password, user)
+  if (!valid) {
+    return jsonError(401, 'Invalid credentials', 'INVALID_CREDENTIALS')
+  }
+
+  const token = await createSessionToken(user.username, env.SESSION_SECRET)
   const url = new URL(request.url)
 
   return Response.json(
-    { user: { username } },
+    { user: { username: user.username } },
     {
       headers: { 'Set-Cookie': sessionCookieHeader(token, url) },
     },

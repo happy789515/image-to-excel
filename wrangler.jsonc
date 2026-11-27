@@ -3,6 +3,9 @@
   "name": "image-to-excel",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-25",
+  "placement": {
+    "region": "gcp:asia-northeast3",
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -20,21 +23,15 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "image-to-excel",
       "database_id": "e98b2b44-6c8c-430f-a0ed-ade8dcc4f387",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
-  "r2_buckets": [
-    {
-      "binding": "IMAGES",
-      "bucket_name": "image-to-excel-images"
-    }
-  ],
-  "previews": {}
+  "previews": {},
 }

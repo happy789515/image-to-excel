@@ -175,7 +175,7 @@ export function WorkshopSidebar({
           </>
         ) : (
           <p className="text-center text-xs text-muted-foreground">
-            {PROJECT_UPLOAD_ACCEPT_LABEL} · 서버에 저장
+            {PROJECT_UPLOAD_ACCEPT_LABEL} · 브라우저에 저장
           </p>
         )}
       </div>

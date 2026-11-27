@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS tables;
+DROP TABLE IF EXISTS sheets;
+DROP TABLE IF EXISTS images;
+DROP TABLE IF EXISTS projects;
+
+CREATE TABLE users (
+  id TEXT PRIMARY KEY NOT NULL,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  salt TEXT NOT NULL,
+  iterations INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);

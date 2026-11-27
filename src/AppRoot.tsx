@@ -8,6 +8,7 @@ import { LoginScreen } from '@/components/LoginScreen'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { checkAuth, logoutApi } from '@/lib/api/auth'
 import { AUTH_EXPIRED_EVENT } from '@/lib/api/projects'
+import { setLocalUser } from '@/lib/local/db'
 import {
   motionInitial,
   motionTransition,
@@ -54,13 +55,6 @@ export function AppRoot() {
   )
 
   useEffect(() => {
-    const req = indexedDB.deleteDatabase('image-to-excel-local')
-    req.onerror = () => console.error(req.error ?? 'IndexedDB delete failed')
-    req.onblocked = () =>
-      console.error('IndexedDB delete blocked (close other tabs)')
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
     void checkAuth()
       .then((result) => {
@@ -72,6 +66,7 @@ export function AppRoot() {
         }
         setAuthBackendMessage(null)
         if (result.user) {
+          setLocalUser(result.user.username)
           setUsername(result.user.username)
           setAuthPhase('user')
         } else {
@@ -100,6 +95,7 @@ export function AppRoot() {
 
   useEffect(() => {
     const onExpired = () => {
+      setLocalUser(null)
       setUsername(null)
       setAuthPhase('guest')
       setReady(false)
@@ -116,6 +112,7 @@ export function AppRoot() {
   }, [])
 
   const handleLoggedIn = useCallback((name: string) => {
+    setLocalUser(name)
     setUsername(name)
     setAuthPhase('user')
     setReady(false)
@@ -126,6 +123,7 @@ export function AppRoot() {
   const handleLogout = useCallback(() => {
     void logoutApi()
       .then(() => {
+        setLocalUser(null)
         setUsername(null)
         setAuthPhase('guest')
         setReady(false)

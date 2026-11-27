@@ -10,7 +10,8 @@ type ProxyPayload = {
 }
 
 /**
- * Egress via wnam — Gemini rejects some CF edge regions (e.g. HKG).
+ * Regional egress for Gemini — apac-ne (Northeast Asia) for lower KR latency.
+ * Avoids routing via wnam when DO is placed near Korea/Japan.
  */
 export class UsExit {
   async fetch(request: Request): Promise<Response> {
