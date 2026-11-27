@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run lint && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:worker": "npm run build && wrangler d1 migrations apply DB --local && wrangler dev --ip 127.0.0.1 --port 8787",
