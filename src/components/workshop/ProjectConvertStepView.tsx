@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Play, PlayCircle } from 'lucide-react'
+import { cn } from 'cn'
 
 import { EditableExcelSheetTable } from '@/components/EditableExcelSheetTable'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
+import { SheetCropThumb } from '@/components/workshop/SheetCropThumb'
 import { useProjectWorkshop } from '@/hooks/use-project-workshop'
 import { patchSheet, postSheetExtract } from '@/lib/api/projects'
 import type { SheetJson } from '@/lib/api/projects'
@@ -17,7 +19,12 @@ import {
   cropPayloadOverLimit,
   EXTRACT_CROP_PROFILE,
 } from '@/lib/project/crop-payload'
-import { sheetIsReady, sheetsSorted, tablesInSheet } from '@/lib/project/selectors'
+import {
+  imageNameById,
+  sheetIsReady,
+  sheetsSorted,
+  tablesInSheet,
+} from '@/lib/project/selectors'
 
 type Props = {
   fetchImageBlob: (imageId: string, signal?: AbortSignal) => Promise<Blob>
@@ -26,6 +33,7 @@ type Props = {
 export function ProjectConvertStepView({ fetchImageBlob }: Props) {
   const { projectId, detail, setDetail } = useProjectWorkshop()
   const sheets = useMemo(() => sheetsSorted(detail), [detail])
+  const imageNames = useMemo(() => imageNameById(detail), [detail])
   const [activeSheetId, setActiveSheetId] = useState<string | null>(
     sheets[0]?.id ?? null,
   )
@@ -61,6 +69,7 @@ export function ProjectConvertStepView({ fetchImageBlob }: Props) {
   }, [activeSheetId, sheets])
 
   const activeSheet = sheets.find((s) => s.id === activeSheetId) ?? sheets[0]
+  const previewJoined = Boolean(activeSheet?.rows?.length)
 
   const sheetStatus = (sheet: SheetJson): {
     label: string
@@ -192,18 +201,34 @@ export function ProjectConvertStepView({ fetchImageBlob }: Props) {
         </Alert>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,280px)_1fr]">
-        <div className="min-h-0 space-y-2 overflow-y-auto">
+      <div
+        className={cn(
+          'grid min-h-0 flex-1 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]',
+          previewJoined
+            ? 'gap-0 overflow-hidden rounded-xl border border-primary/40 bg-card ring-1 ring-primary/15'
+            : 'gap-3',
+        )}
+      >
+        <div
+          className={cn(
+            'min-h-0 space-y-2 overflow-y-auto',
+            previewJoined ? 'border-r border-primary/20 p-2' : '-m-1 p-1',
+          )}
+        >
           {sheets.map((sheet) => {
             const status = sheetStatus(sheet)
+            const isActive = activeSheet?.id === sheet.id
             return (
               <Card
                 key={sheet.id}
-                className={
-                  activeSheet?.id === sheet.id
-                    ? 'border-primary/40 ring-1 ring-primary/20'
-                    : undefined
-                }
+                onClick={() => setActiveSheetId(sheet.id)}
+                className={cn(
+                  'cursor-pointer',
+                  isActive &&
+                    (previewJoined
+                      ? 'bg-primary/8 shadow-none ring-1 ring-inset ring-primary/30'
+                      : 'border-primary/40 ring-1 ring-primary/20'),
+                )}
               >
                 <CardHeader className="space-y-1 p-3 pb-2">
                   <div className="flex items-start justify-between gap-2">
@@ -224,7 +249,20 @@ export function ProjectConvertStepView({ fetchImageBlob }: Props) {
                     </p>
                   ) : null}
                 </CardHeader>
-                <CardContent className="p-3 pt-0">
+                <CardContent className="space-y-2 p-3 pt-0">
+                  {tablesInSheet(detail, sheet.id).length > 0 ? (
+                    <ul className="space-y-1">
+                      {tablesInSheet(detail, sheet.id).map((table) => (
+                        <li key={table.id}>
+                          <SheetCropThumb
+                            table={table}
+                            imageName={imageNames.get(table.imageId) ?? ''}
+                            fetchImageBlob={fetchImageBlob}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <Button
                     type="button"
                     size="xs"
@@ -235,7 +273,10 @@ export function ProjectConvertStepView({ fetchImageBlob }: Props) {
                       runningSheetId === sheet.id ||
                       tablesInSheet(detail, sheet.id).length === 0
                     }
-                    onClick={() => void extractOne(sheet.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void extractOne(sheet.id)
+                    }}
                   >
                     {runningSheetId === sheet.id ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -259,13 +300,18 @@ export function ProjectConvertStepView({ fetchImageBlob }: Props) {
             <TabsContent
               key={s.id}
               value={s.id}
-              className="min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
             >
               {exportSheet && activeSheet?.id === s.id ? (
                 <EditableExcelSheetTable
                   sheet={exportSheet}
                   onChange={(rows) => scheduleRowSave(s.id, rows)}
-                  className="flex min-h-0 flex-1 flex-col rounded-lg border border-border"
+                  className={cn(
+                    'flex min-h-0 flex-1 flex-col',
+                    previewJoined
+                      ? 'border-0'
+                      : 'rounded-lg border border-border',
+                  )}
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border p-8 text-sm text-muted-foreground">
