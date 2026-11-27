@@ -1,4 +1,5 @@
-const US_EXIT_NAME = 'gemini-us'
+/** New id so DO respects apac-ne on first get (hints are fixed after creation). */
+const US_EXIT_NAME = 'gemini-apac-ne'
 
 export async function fetchGemini(
   env: Env,
@@ -12,7 +13,7 @@ export async function fetchGemini(
   })
 
   const stub = env.US_EXIT.get(env.US_EXIT.idFromName(US_EXIT_NAME), {
-    locationHint: 'wnam',
+    locationHint: 'apac-ne',
   })
 
   return stub.fetch('https://us-exit.internal/', {
