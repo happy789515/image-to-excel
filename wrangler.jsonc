@@ -26,7 +26,7 @@
     {
       "binding": "DB",
       "database_name": "image-to-excel",
-      "database_id": "local-image-to-excel",
+      "database_id": "e98b2b44-6c8c-430f-a0ed-ade8dcc4f387",
       "migrations_dir": "migrations"
     }
   ],
