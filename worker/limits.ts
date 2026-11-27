@@ -1,4 +1,2 @@
-export const MAX_PROJECT_IMAGES = 30
-export const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024
 export const MAX_GEMINI_REQUEST_BYTES = 20 * 1024 * 1024
-export const MAX_BOXES_PER_IMAGE = 50
+export const MAX_GEMINI_ITEMS = 300

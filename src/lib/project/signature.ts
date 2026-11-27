@@ -33,10 +33,10 @@ export function computeSheetExtractSignature(tables: SignatureTable[]): string {
 }
 
 export function sheetIsStale(
-  rowsJson: string | null,
+  hasRows: boolean,
   storedSignature: string | null,
   currentSignature: string,
 ): boolean {
-  if (!rowsJson || storedSignature == null) return false
+  if (!hasRows || storedSignature == null) return false
   return storedSignature !== currentSignature
 }

@@ -4,8 +4,8 @@ import type { FileRejection } from 'react-dropzone'
 import type { ProjectDetail } from '@/lib/api/projects'
 import {
   deleteImage as deleteImageApi,
+  getImageBlob,
   getProject,
-  imageFileUrl,
   uploadImage,
 } from '@/lib/api/projects'
 import {
@@ -48,6 +48,8 @@ export function useProjectImages({ projectId, detail, onDetail }: Options) {
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const blobCache = useRef(new Map<string, Blob>())
+  const previewUrlsRef = useRef(new Map<string, string>())
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
 
   const sortedImages = useMemo(() => imagesSorted(detail), [detail])
 
@@ -57,9 +59,9 @@ export function useProjectImages({ projectId, detail, onDetail }: Options) {
       name: img.name,
       mime: img.mime,
       size: img.size,
-      previewUrl: imageFileUrl(projectId, img.id),
+      previewUrl: previewUrls[img.id] ?? '',
     }))
-  }, [projectId, sortedImages])
+  }, [previewUrls, sortedImages])
 
   const activeId = useMemo(() => {
     if (queue.length === 0) return null
@@ -73,23 +75,8 @@ export function useProjectImages({ projectId, detail, onDetail }: Options) {
     async (imageId: string, signal?: AbortSignal): Promise<Blob> => {
       const cached = blobCache.current.get(imageId)
       if (cached) return cached
-      let res: Response
-      try {
-        res = await fetch(imageFileUrl(projectId, imageId), {
-          credentials: 'include',
-          signal,
-        })
-      } catch (err) {
-        if (signal?.aborted) throw err
-        const message = '이미지를 불러오지 못했습니다.'
-        throw err instanceof Error
-          ? new Error(message, { cause: err })
-          : new Error(message)
-      }
-      if (!res.ok) {
-        throw new Error('이미지를 불러오지 못했습니다.')
-      }
-      const blob = await res.blob()
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const blob = await getImageBlob(projectId, imageId)
       blobCache.current.set(imageId, blob)
       return blob
     },
@@ -104,8 +91,40 @@ export function useProjectImages({ projectId, detail, onDetail }: Options) {
   }, [detail.images])
 
   useEffect(() => {
+    const urls = previewUrlsRef.current
+    let cancelled = false
+    const liveIds = new Set(detail.images.map((i) => i.id))
+    for (const [id, url] of [...urls.entries()]) {
+      if (!liveIds.has(id)) {
+        URL.revokeObjectURL(url)
+        urls.delete(id)
+      }
+    }
+    for (const img of detail.images) {
+      if (urls.has(img.id)) continue
+      getImageBlob(projectId, img.id)
+        .then((blob) => {
+          if (cancelled || urls.has(img.id)) return
+          const url = URL.createObjectURL(blob)
+          urls.set(img.id, url)
+          setPreviewUrls((prev) => ({ ...prev, [img.id]: url }))
+        })
+        .catch((err: unknown) => {
+          console.error(err)
+          if (!cancelled) setError('이미지를 불러오지 못했습니다.')
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [detail.images, projectId])
+
+  useEffect(() => {
+    const urls = previewUrlsRef.current
     const cache = blobCache.current
     return () => {
+      for (const url of urls.values()) URL.revokeObjectURL(url)
+      urls.clear()
       cache.clear()
     }
   }, [projectId])
